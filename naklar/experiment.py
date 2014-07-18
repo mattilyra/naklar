@@ -9,6 +9,7 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime, func,\
     Float, Enum
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 
 _engine = create_engine('sqlite:///:memory:', echo=False)
@@ -28,11 +29,14 @@ def load_experiments(root_dir, engine=None):
                 d = pickle.load(fin)
                 d = {k: v for k, v in d.iteritems() if k in cols}
 
-            with open(os.path.join(root, 'SGE.txt'), 'r') as fin:
-                for line in fin:
-                    k, _, v = line.partition(' ')
-                    if k in ['JOB_ID', 'TASK_ID', 'ITERATION']:
-                        d.update({k.lower(): int(v)})
+            # with open(os.path.join(root, 'SGE.txt'), 'r') as fin:
+            #     for line in fin:
+            #         k, _, v = line.partition(' ')
+            #         if k in ['JOB_ID', 'TASK_ID', 'ITERATION']:
+            #             d.update({k.lower(): int(v)})
+
+            job_id, task_id = os.path.basename(root).split('_')
+            d.update({'job_id': int(job_id), 'task_id': int(task_id)})
 
             # modify the results file path so that they become relative to
             # the root_dir on the current file system
@@ -56,6 +60,72 @@ def load_experiments(root_dir, engine=None):
 
     session = Session(bind=engine)
     return session
+
+
+def get_rows(session, *columns, **filters):
+    """Get rows from the Experiment table associated with session.
+
+    Parameters
+    ----------
+        session : Session
+
+        *columns : str, unicode or InstrumentedAttribute, optional
+            Optional parameters to retrieve only specific column values
+            from the Experiment table. If none are specified the whole
+            Experiment object is returned.
+
+        **filters
+            Optional keys to filter the returned Experiments by.
+
+    Returns
+    -------
+    list
+        A list of Experiment or KeyedTuple.
+
+
+    See Also
+    --------
+    sqlalchemy.orm.session.Session,
+    sqlalchemy.orm.attributes.InstrumentedAttribute,
+    sqlalchemy.util._collections.KeyedTuple
+
+    Retrieve all Experiments where Experiment.k == 2
+
+    >> session = load_experiments('.')
+    >> rows = retrieve(session, k=2)
+
+    Retrieve specific columns from Experiments where Experiment.k == 2
+
+    >> session = load_experiments('.')
+    >> rows = retrieve(session, 'model_type', 'results_file', k=2)
+
+    >> session = load_experiments('.')
+    >> rows = retrieve(session, 'model_type', 'results_file', k=[1, 2, 3, 5, 8])
+    """
+    if columns:
+        cols = []
+        for col in columns:
+            if isinstance(col, (str, unicode)):
+                cols.append(getattr(Experiment, col))
+            elif isinstance(col, InstrumentedAttribute):
+                cols.append(col)
+    else:
+        cols = [Experiment]
+
+    q = session.query(*cols)
+
+    if filters:
+        filts = []
+        for k, v in filters.iteritems():
+            if hasattr(v, 'split'):
+                filts.append(getattr(Experiment, k) == v)
+            elif hasattr(v, '__getitem__') or hasattr(v, '__iter__'):
+                filts.append(getattr(Experiment, k).in_(v))
+            else:
+                filts.append(getattr(Experiment, k) == v)
+        q = q.filter(*filts)
+    rows = q.all()
+    return rows
 
 
 class Experiment(Base):
