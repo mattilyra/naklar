@@ -10,14 +10,11 @@ session_ = None
 _engine = None
 
 
-def initialise(exp_class, *args, **kwargs):
-    """Initialises a database engine to access the experiments DB.
-
-    If no arguments are defined an in memory SQLite data base is created.
+def connect(*args, **kwargs):
+    """Initialises a database connection to access the experiments DB.
 
     :param args:
     :param kwargs:
-    :return:
     """
     global _engine
     if not args:
@@ -25,10 +22,19 @@ def initialise(exp_class, *args, **kwargs):
     else:
         _engine = create_engine(*args, **kwargs)
 
-    experiment._Base.metadata.create_all(_engine)
 
+def initialise(exp_class, *args, **kwargs):
+    """Initialises a database connection to access the experiments DB.
+
+    If no arguments are defined an in memory SQLite data base is created. The
+    experiments table is also created after initialising the connection.
+    """
+    if _engine is None:
+        connect(*args, **kwargs)
+    
     if experiment.ExperimentBase in exp_class.__bases__:
         experiment.experiment_cls_ = exp_class
+        exp_class.metadata.create_all(_engine)
     else:
         raise ValueError('Experiment class must extend '
                          'naklar.experiment.ExperimentBase')

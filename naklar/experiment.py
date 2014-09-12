@@ -6,15 +6,12 @@ except ImportError:
     import pickle
 
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, func,\
-    Float, Enum
-from sqlalchemy.orm import Session
-from sqlalchemy.ext.declarative import declarative_base
+    Text
+from sqlalchemy.ext.declarative import declarative_base, declared_attr
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 
-_engine = create_engine('sqlite:///:memory:', echo=False)
-_Base = declarative_base()
-
+# _engine = create_engine('sqlite:///:memory:', echo=False)
 
 def get_rows(session, *columns, **filters):
     """Get rows from the Experiment table associated with session.
@@ -82,18 +79,22 @@ def get_rows(session, *columns, **filters):
     return rows
 
 
-class ExperimentBase(_Base):
+class _Experiment(object):
     """The Experiment class holds references to settings of an experiment.
     """
-
-    __tablename__ = 'experiment'
+    @declared_attr
+    def __tablename__(cls):
+        return 'experiment'
 
     id = Column(Integer, primary_key=True)
-    experiment_name = Column(String)
-    experiment_comment = Column(String)
-    home = Column(String)
+    experiment_name = Column(String(255))
+    experiment_comment = Column(Text(65535))
+    home = Column(String(255))
     started_at = Column(DateTime, default=func.now())
     finished_at = Column(DateTime, default=func.now())
 
+ExperimentBase = declarative_base(cls=_Experiment)
 
+# the default experiment claass is ExperimentBase, this can be overridden by
+# passing another experiment class to naklar.initialise
 experiment_cls_ = ExperimentBase
