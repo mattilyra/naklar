@@ -5,16 +5,16 @@ try:
 except ImportError:
     import pickle
 
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, func,\
-    Text, Table
+from sqlalchemy import create_engine, func
+from sqlalchemy import Column, Integer, String, DateTime, Text
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import InstrumentedAttribute
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.declarative import declarative_base, DeferredReflection
 from sqlalchemy.exc import NoSuchTableError
 
 
 _engine = None
-_Base = declarative_base()
+_Base = declarative_base(cls=DeferredReflection)
 
 
 def connect(*args, **kwargs):
@@ -38,15 +38,15 @@ def initialise(experiment_table, *args, **kwargs):
     """
     if _engine is None:
         connect(*args, **kwargs)
-    
+
     global experiment_cls_
     if hasattr(experiment_table, 'split'):
         # connect to a data base that does contain the experiments table
         # and infer the Experiment class via reflection
         try:
-            ExperimentBase.__table__ = Table(experiment_table, _Base.metadata,
-                                             autoload=True,
-                                             autoload_with=_engine)
+            ExperimentBase.__tablename__ = experiment_table
+            ExperimentBase.__table_args__ = {'autoload': True}
+            ExperimentBase.prepare(_engine)
             experiment_cls_ = ExperimentBase
         except NoSuchTableError:
             raise NoSuchTableError('Table \'{}\' does not exists in database.'
@@ -54,6 +54,7 @@ def initialise(experiment_table, *args, **kwargs):
     elif ExperimentBase in experiment_table.__bases__:
         # connect to a data base that does not contain the experiments table
         experiment_table.metadata.create_all(_engine)
+        ExperimentBase.prepare(_engine)
         experiment_cls_ = experiment_table
     else:
         raise ValueError('Experiment class must extend '
