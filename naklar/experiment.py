@@ -38,7 +38,7 @@ def initialise(experiment_table, *args, **kwargs):
     """
     if _engine is None:
         connect(*args, **kwargs)
-    print(_engine)
+    
     global experiment_cls_
     if hasattr(experiment_table, 'split'):
         # connect to a data base that does contain the experiments table
@@ -151,7 +151,3 @@ class ExperimentBase(_Base):
     home = Column(String(255))
     started_at = Column(DateTime, default=func.now())
     finished_at = Column(DateTime, default=func.now())
-
-# the default experiment claass is ExperimentBase, this can be overridden by
-# passing another experiment class to naklar.initialise
-# experiment_cls_ = ExperimentBase
