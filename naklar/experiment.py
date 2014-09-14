@@ -6,12 +6,68 @@ except ImportError:
     import pickle
 
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, func,\
-    Text
+    Text, MetaData
+from sqlalchemy.orm import Session
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 
-# _engine = create_engine('sqlite:///:memory:', echo=False)
+session_ = None
+_engine = None
+
+
+def connect(*args, **kwargs):
+    """Initialises a database connection to access the experiments DB.
+
+    :param args:
+    :param kwargs:
+    """
+    global _engine
+    if not args:
+        _engine = create_engine('sqlite:///:memory:', echo=False)
+    else:
+        _engine = create_engine(*args, **kwargs)
+
+
+def initialise(experiment_table, *args, **kwargs):
+    """Initialises a database connection to access the experiments DB.
+
+    If no arguments are defined an in memory SQLite data base is created. The
+    experiments table is also created after initialising the connection.
+    """
+    if _engine is None:
+        connect(*args, **kwargs)
+
+    global _Experiment
+    _Experiment = declarative_base(cls=experiment_table)
+    if ExperimentBase in experiment_table.__bases__:
+        global experiment_cls_
+        experiment_cls_ = ExperimentBase
+        ExperimentBase.metadata.create_all(_engine)
+    elif hasattr(experiment_table, 'split'):
+        meta = MetaData()
+        meta.reflect(bind=_engine)
+        for k, v in meta.tables.iteritems():
+            if k == experiment_table:
+                experiment_cls_ = v
+                break
+        else:
+            raise ValueError('Table \'{}\' not found in database.'
+                             .format(experiment_table))
+    else:
+        raise ValueError('Experiment class must extend '
+                         'naklar.experiment.ExperimentBase')
+
+
+def populate_from_disk(root_directory, load_func=None):
+    global session_
+    if callable is not None:
+        session_ = Session(bind=_engine)
+        load_func(root_directory, session_)
+        session_.commit()
+        session_.close()
+        session_ = Session(bind=_engine)
+
 
 def get_rows(session, *columns, **filters):
     """Get rows from the Experiment table associated with session.
@@ -57,11 +113,11 @@ def get_rows(session, *columns, **filters):
         cols = []
         for col in columns:
             if isinstance(col, (str, unicode)):
-                cols.append(getattr(experiment_cls_, col))
+                cols.append(getattr(_Experiment, col))
             elif isinstance(col, InstrumentedAttribute):
                 cols.append(col)
     else:
-        cols = [experiment_cls_]
+        cols = [_Experiment]
 
     q = session.query(*cols)
 
@@ -69,17 +125,17 @@ def get_rows(session, *columns, **filters):
         filts = []
         for k, v in filters.iteritems():
             if hasattr(v, 'split'):
-                filts.append(getattr(experiment_cls_, k) == v)
+                filts.append(getattr(_Experiment, k) == v)
             elif hasattr(v, '__getitem__') or hasattr(v, '__iter__'):
-                filts.append(getattr(experiment_cls_, k).in_(v))
+                filts.append(getattr(_Experiment, k).in_(v))
             else:
-                filts.append(getattr(experiment_cls_, k) == v)
+                filts.append(getattr(_Experiment, k) == v)
         q = q.filter(*filts)
     rows = q.all()
     return rows
 
 
-class _Experiment(object):
+class ExperimentBase(object):
     """The Experiment class holds references to settings of an experiment.
     """
     @declared_attr
@@ -93,8 +149,6 @@ class _Experiment(object):
     started_at = Column(DateTime, default=func.now())
     finished_at = Column(DateTime, default=func.now())
 
-ExperimentBase = declarative_base(cls=_Experiment)
-
 # the default experiment claass is ExperimentBase, this can be overridden by
 # passing another experiment class to naklar.initialise
-experiment_cls_ = ExperimentBase
+# experiment_cls_ = ExperimentBase
