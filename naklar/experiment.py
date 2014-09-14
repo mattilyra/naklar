@@ -12,8 +12,9 @@ from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.exc import NoSuchTableError
 
-session_ = None
+
 _engine = None
+_Base = declarative_base()
 
 
 def connect(*args, **kwargs):
@@ -58,25 +59,20 @@ def initialise(experiment_table, *args, **kwargs):
         raise ValueError('Experiment class must extend '
                          'naklar.experiment.ExperimentBase')
 
-    global session_
-    session_ = Session(bind=_engine)
-
 
 def populate_from_disk(root_directory, load_func=None):
-    global session_
     if callable is not None:
-        session_ = Session(bind=_engine)
-        load_func(root_directory, session_)
-        session_.commit()
-        session_.close()
-        session_ = Session(bind=_engine)
+        session = Session(bind=_engine)
+        load_func(root_directory, session)
+        session.commit()
+        session.close()
     else:
         raise NotImplementedError('Autoloading experiments from disk not '
                                   'implemented yet, please provide a load '
                                   'function.')
 
 
-def get_rows(session, *columns, **filters):
+def select(*columns, **filters):
     """Get rows from the Experiment table associated with session.
 
     Parameters
@@ -126,6 +122,7 @@ def get_rows(session, *columns, **filters):
     else:
         cols = [experiment_cls_]
 
+    session = Session(bind=_engine)
     q = session.query(*cols)
 
     if filters:
@@ -139,13 +136,14 @@ def get_rows(session, *columns, **filters):
                 filts.append(getattr(experiment_cls_, k) == v)
         q = q.filter(*filts)
     rows = q.all()
+    session.close()
     return rows
 
-_Base = declarative_base()
+
 class ExperimentBase(_Base):
     """The Experiment class holds references to settings of an experiment.
     """
-    __tablename__ = 'experiment'
+    __tablename__ = 'experiment' # can be overridden by user
 
     id = Column(Integer, primary_key=True)
     experiment_name = Column(String(255))
