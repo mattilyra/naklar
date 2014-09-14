@@ -31,7 +31,7 @@ def initialise(exp_class, *args, **kwargs):
     """
     if _engine is None:
         connect(*args, **kwargs)
-    
+
     if experiment.ExperimentBase in exp_class.__bases__:
         experiment.experiment_cls_ = exp_class
         exp_class.metadata.create_all(_engine)
