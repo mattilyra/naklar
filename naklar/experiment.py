@@ -37,26 +37,28 @@ def initialise(experiment_table, *args, **kwargs):
     """
     if _engine is None:
         connect(*args, **kwargs)
-
+    print(_engine)
     global _Experiment
-    _Experiment = declarative_base(cls=experiment_table)
-    if ExperimentBase in experiment_table.__bases__:
-        global experiment_cls_
-        experiment_cls_ = ExperimentBase
-        ExperimentBase.metadata.create_all(_engine)
-    elif hasattr(experiment_table, 'split'):
+    if hasattr(experiment_table, 'split'):
         meta = MetaData()
         meta.reflect(bind=_engine)
         for k, v in meta.tables.iteritems():
             if k == experiment_table:
-                experiment_cls_ = v
+                _Experiment = v
                 break
         else:
             raise ValueError('Table \'{}\' not found in database.'
                              .format(experiment_table))
+    elif ExperimentBase in experiment_table.__bases__:
+        _Experiment = declarative_base(cls=experiment_table)
+        _Experiment.metadata.create_all(_engine)
+
     else:
         raise ValueError('Experiment class must extend '
                          'naklar.experiment.ExperimentBase')
+
+    global experiment_cls_
+    experiment_cls_ = _Experiment
 
 
 def populate_from_disk(root_directory, load_func=None):
@@ -134,13 +136,13 @@ def get_rows(session, *columns, **filters):
     rows = q.all()
     return rows
 
-
-class ExperimentBase(object):
+_Base = declarative_base()
+class ExperimentBase(_Base):
     """The Experiment class holds references to settings of an experiment.
     """
-    @declared_attr
-    def __tablename__(cls):
-        return 'experiment'
+    # @declared_attr
+    # def __tablename__(cls):
+    #     return 'experiment'
 
     id = Column(Integer, primary_key=True)
     experiment_name = Column(String(255))
