@@ -70,6 +70,10 @@ def populate_from_disk(root_directory, load_func=None):
         session_.commit()
         session_.close()
         session_ = Session(bind=_engine)
+    else:
+        raise NotImplementedError('Autoloading experiments from disk not '
+                                  'implemented yet, please provide a load '
+                                  'function.')
 
 
 def get_rows(session, *columns, **filters):
