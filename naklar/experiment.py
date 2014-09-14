@@ -14,7 +14,7 @@ from sqlalchemy.exc import NoSuchTableError
 
 
 _engine = None
-_Base = declarative_base(cls=DeferredReflection)
+ExperimentBase = declarative_base(cls=DeferredReflection)
 
 
 def connect(*args, **kwargs):
@@ -139,16 +139,3 @@ def select(*columns, **filters):
     rows = q.all()
     session.close()
     return rows
-
-
-class ExperimentBase(_Base):
-    """The Experiment class holds references to settings of an experiment.
-    """
-    __tablename__ = 'experiment' # can be overridden by user
-
-    id = Column(Integer, primary_key=True)
-    experiment_name = Column(String(255))
-    experiment_comment = Column(Text(65535))
-    home = Column(String(255))
-    started_at = Column(DateTime, default=func.now())
-    finished_at = Column(DateTime, default=func.now())
