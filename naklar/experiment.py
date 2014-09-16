@@ -6,7 +6,8 @@ except ImportError:
     import pickle
 
 from sqlalchemy import create_engine, func
-from sqlalchemy import Column, Integer, String, DateTime, Text
+from sqlalchemy import Column, Integer, String, DateTime, Float, MetaData, \
+    Table, Boolean
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.ext.declarative import declarative_base, DeferredReflection
@@ -30,6 +31,51 @@ def connect(*args, **kwargs):
         _engine = create_engine(*args, **kwargs)
 
 
+def from_existing_db(tablename):
+    try:
+        ExperimentBase.__tablename__ = tablename
+        ExperimentBase.__table_args__ = {'autoload': True}
+        ExperimentBase.prepare(_engine)
+    except NoSuchTableError:
+        raise NoSuchTableError('Table \'{}\' does not exists in database.'
+                               .format(tablename))
+    return ExperimentBase
+
+
+def from_dict(root_dir, dict_filename='settings.pkl'):
+    conf = {}
+    for root, _, files in os.walk(root_dir, topdown=False):
+        if dict_filename in files:
+            pth = os.path.join(root, dict_filename)
+            with open(pth, 'r') as fh:
+                d = pickle.load(fh)
+            for k, v in conf.iteritems():
+                if k in conf and v is not None:
+                    conf[k] = v
+                elif k not in conf:
+                    conf[k] = v
+
+    if any(itm is None for itm in conf.values()):
+        pth = os.path.join(root_dir, 'conf.txt')
+        with open(pth, 'w') as fh:
+            for k, v in conf.iteritems():
+                fh.write('{}\t{}\t{}\n'.format(k, v, type(v)))
+
+        raise AttributeError('Some attributes have None values and their '
+                             'data type can not be inferred for creating the '
+                             'table. Please edit the file {}, provide the '
+                             'missing data types and then call '
+                             'naklar.experiment.from_dict again.'.format(pth))
+
+    meta = MetaData()
+    table = Table('experiment', meta)
+    types = [DateTime, Float, Integer, Boolean, String]
+    for k, v in conf.iteritems():
+
+        table.append_column()
+    #todo: implement
+
+
 def initialise(experiment_table, *args, **kwargs):
     """Initialises a database connection to access the experiments DB.
 
@@ -43,22 +89,20 @@ def initialise(experiment_table, *args, **kwargs):
     if hasattr(experiment_table, 'split'):
         # connect to a data base that does contain the experiments table
         # and infer the Experiment class via reflection
-        try:
-            ExperimentBase.__tablename__ = experiment_table
-            ExperimentBase.__table_args__ = {'autoload': True}
-            ExperimentBase.prepare(_engine)
-            experiment_cls_ = ExperimentBase
-        except NoSuchTableError:
-            raise NoSuchTableError('Table \'{}\' does not exists in database.'
-                                   .format(experiment_table))
+        if os.path.exists(experiment_table):
+            experiment_cls = _from_dict(experiment_table)
+        else:
+            experiment_cls_ = _from_existing_db(experiment_table)
     elif ExperimentBase in experiment_table.__bases__:
-        # connect to a data base that does not contain the experiments table
+        # connect to a database and create a new table
         experiment_table.metadata.create_all(_engine)
         ExperimentBase.prepare(_engine)
         experiment_cls_ = experiment_table
     else:
         raise ValueError('Experiment class must extend '
-                         'naklar.experiment.ExperimentBase')
+                         'naklar.experiment.ExperimentBase, be a refence to a '
+                         'pickled Python dictionary or be the name of '
+                         'an existing table.')
 
 
 def populate_from_disk(root_directory, load_func=None):
