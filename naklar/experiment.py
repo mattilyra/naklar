@@ -81,8 +81,48 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id']):
 def initialise(experiment_table, *args, **kwargs):
     """Initialises a database connection to access the experiments DB.
 
-    If no arguments are defined an in memory SQLite data base is created. The
-    experiments table is also created after initialising the connection.
+    If no connection arguments are defined an in memory SQLite data base is
+    created. The experiments table is also created after initialising the
+    connection.
+
+    Arguments
+    =========
+    experiment_table : sqlalchemy.base or string
+        Either a declarative `sqlalchemy` definition of a table that extends
+        `naklar.experiment.ExperimentBase` or a string. In case of string the
+        parameter can be a local file path reference, or the name of an
+        existing table in the database.
+
+    *args: see sqlalchemy.create_engine
+        The `args` are passed to sqlachemy when creating a data base
+        connection. The parameter of most interest is the address of the
+        database to connect to.
+    **kwargs: see sqlalchemy.create_engine or list of primary keys
+
+    Connect to an in memoroy SQLite database and create an experiment Table
+    >>> from naklar import experiment
+    >>> from sqlalchemy import Column, Integer, String
+    >>> class Experiment(experiment.ExperimentBase):
+    >>>     __tablename__ = 'experiment'
+    >>>     id = Column(Integer, primary_key=True)
+    >>>     experiment_name = Column(String(255))
+    >>>     home = Column(String(255))
+    >>> experiment.initialise(Experiment)
+
+    Connect to an existing MySQL database using the PyMSQL module and reflect
+    the definition of a table called `experiment`
+    >>> from naklar import experiment
+    >>> dbname = 'ab123'
+    >>> addr = 'mysql.naklar.com'
+    >>> usr_pass = 'user_123:pass-word'
+    >>> protocol = 'mysql+pymsql'
+    >>> connect_str = '{}://{}@{}/{}'.format(protocol, user_pass, addr, dbname)
+    >>> experiment.initialise('experiment', connect_str)
+
+    See Also
+    ========
+        `Link SQLAlchemy connect_engine <http://docs.sqlalchemy.org/en/latest/core/engines.html?highlight
+        =create_engine>`_
     """
     if _engine is None:
         connect(*args, **kwargs)
@@ -92,7 +132,7 @@ def initialise(experiment_table, *args, **kwargs):
         # connect to a data base that does contain the experiments table
         # and infer the Experiment class via reflection
         if os.path.exists(experiment_table):
-            experiment_cls_ = _from_dict(experiment_table)
+            experiment_cls_ = _from_dict(experiment_table, *args, **kwargs)
         else:
             experiment_cls_ = _from_existing_db(experiment_table)
     elif ExperimentBase in experiment_table.__bases__:
