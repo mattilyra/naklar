@@ -64,6 +64,7 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
             if column_type().python_type is type(v):
                 if hasattr(v, 'split'):
                     column_type = String(len(v) * 2)
+                break
         column = Column(k, column_type, primary_key=k in primary_keys)
         table.append_column(column)
 
