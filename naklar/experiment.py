@@ -91,6 +91,25 @@ def initialise(experiment_table, *args, **kwargs):
     created. The experiments table is also created after initialising the
     connection.
 
+    The database connection is defined in a manner similar to SQLAlchemy.
+    After a database connection is established an experiments table can be
+    created and populated in one of three ways:
+    1. Reflect the table definition from an existing table. In this case the
+    name of an existing table should be provided to `initialise`.
+    2. Create a new table from a declarative table definition. In this case a
+    `experiment_table` should be a reference to a class that extends
+    experiment.ExperimentBase.
+    3. Infer the table definition from locally stored dictionaries. If
+    `experiment_table` is a local path reference the directory tree rooted at
+    that path is traversed, looking for pickled dictionaries in `conf.pkl`
+    files. The table definition is inferred from the dictionaries and the
+    created table is populated automatically.
+
+    In the third case above it is necessary to define primary key(s) for the
+    table. If nothing is provided an `id` column is defined by default. Other
+    column names can be provided by setting the `primary_keys` parameter,
+    see doctest examples below.
+
     Arguments
     =========
     experiment_table : sqlalchemy.base or string
@@ -124,6 +143,21 @@ def initialise(experiment_table, *args, **kwargs):
     >>> protocol = 'mysql+pymsql'
     >>> connect_str = '{}://{}@{}/{}'.format(protocol, user_pass, addr, dbname)
     >>> experiment.initialise('experiment', connect_str)
+
+    Infer table definition from a dictionary and auto populate the table
+    >>> from pickle import dump
+    >>> with open('experiments/EXP_1/conf.pkl', 'w') as fh_1,\
+                open('experiments/EXP_2/conf.pkl', 'w') as fh_2,\
+                open('experiments/EXP_3/conf.pkl', 'w') as fh_1:
+    >>>     dump({'exp_id': 0, 'name': 'EXP_1', 'F1': .35}, fh_1)
+    >>>     dump({'exp_id': 1, 'name': 'EXP_2', 'F1': .72}, fh_2)
+    >>>     dump({'exp_id': 2, 'name': 'EXP_3', 'F1': .80}, fh_3)
+    >>> from naklar import experiment
+    >>> experiment.initialise('experiments', primary_keys=['exp_id'])
+    >>> experiment.select()[0].exp_id
+    0
+    >>> experiment.select()[2].F1
+    0.80
 
     See Also
     ========
