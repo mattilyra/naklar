@@ -79,6 +79,8 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
     meta.create_all(bind=_engine)
 
     if autoload:
+        global experiment_cls_
+        experiment_cls_ = _Exp
         populate_from_disk(root_dir, dict_filename)
 
     return _Exp
