@@ -168,9 +168,6 @@ def populate_from_disk(root_directory, dict_file='conf.pkl', load_func=None):
                 session.add(exp)
         session.commit()
         session.close()
-        raise NotImplementedError('Autoloading experiments from disk not '
-                                  'implemented yet, please provide a load '
-                                  'function.')
 
 
 def select(*columns, **filters):
