@@ -31,7 +31,7 @@ def connect(*args, **kwargs):
         _engine = create_engine(*args, **kwargs)
 
 
-def from_existing_db(tablename):
+def _from_existing_db(tablename):
     try:
         ExperimentBase.__tablename__ = tablename
         ExperimentBase.__table_args__ = {'autoload': True}
@@ -42,38 +42,31 @@ def from_existing_db(tablename):
     return ExperimentBase
 
 
-def from_dict(root_dir, dict_filename='settings.pkl'):
+def _from_dict(root_dir, dict_filename='conf.pkl'):
     conf = {}
     for root, _, files in os.walk(root_dir, topdown=False):
         if dict_filename in files:
             pth = os.path.join(root, dict_filename)
             with open(pth, 'r') as fh:
                 d = pickle.load(fh)
-            for k, v in conf.iteritems():
-                if k in conf and v is not None:
+            for k, v in d.iteritems():
+                if k in conf and (conf[k] is None and v is not None):
                     conf[k] = v
                 elif k not in conf:
                     conf[k] = v
 
-    if any(itm is None for itm in conf.values()):
-        pth = os.path.join(root_dir, 'conf.txt')
-        with open(pth, 'w') as fh:
-            for k, v in conf.iteritems():
-                fh.write('{}\t{}\t{}\n'.format(k, v, type(v)))
-
-        raise AttributeError('Some attributes have None values and their '
-                             'data type can not be inferred for creating the '
-                             'table. Please edit the file {}, provide the '
-                             'missing data types and then call '
-                             'naklar.experiment.from_dict again.'.format(pth))
-
-    meta = MetaData()
+    meta = MetaData(bind=_engine)
     table = Table('experiment', meta)
     types = [DateTime, Float, Integer, Boolean, String]
     for k, v in conf.iteritems():
-
-        table.append_column()
-    #todo: implement
+        for column_type in types:
+            if column_type().python_type is type(v):
+                if hasattr(v, 'split'):
+                    column_type = String(len(v) * 2)
+        column = Column(k, column_type)
+        table.append_column(column)
+    meta.create_all(bind=_engine)
+    return table
 
 
 def initialise(experiment_table, *args, **kwargs):
@@ -90,7 +83,7 @@ def initialise(experiment_table, *args, **kwargs):
         # connect to a data base that does contain the experiments table
         # and infer the Experiment class via reflection
         if os.path.exists(experiment_table):
-            experiment_cls = _from_dict(experiment_table)
+            experiment_cls_ = _from_dict(experiment_table)
         else:
             experiment_cls_ = _from_existing_db(experiment_table)
     elif ExperimentBase in experiment_table.__bases__:
