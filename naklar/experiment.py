@@ -8,7 +8,7 @@ except ImportError:
 from sqlalchemy import create_engine, func
 from sqlalchemy import Column, Integer, String, DateTime, Float, MetaData, \
     Table, Boolean
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, mapper
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.ext.declarative import declarative_base, DeferredReflection
 from sqlalchemy.exc import NoSuchTableError
@@ -65,8 +65,9 @@ def _from_dict(root_dir, dict_filename='conf.pkl'):
                     column_type = String(len(v) * 2)
         column = Column(k, column_type)
         table.append_column(column)
+    mapper(_Exp, table)
     meta.create_all(bind=_engine)
-    return table
+    return _Exp
 
 
 def initialise(experiment_table, *args, **kwargs):
@@ -98,13 +99,22 @@ def initialise(experiment_table, *args, **kwargs):
                          'an existing table.')
 
 
-def populate_from_disk(root_directory, load_func=None):
-    if callable is not None:
+def populate_from_disk(root_directory, dict_file='conf.pkl', load_func=None):
+    if load_func is not None:
         session = Session(bind=_engine)
         load_func(root_directory, session)
         session.commit()
         session.close()
     else:
+        session = Session(bind=_engine)
+        for root, _, files in os.walk(root_directory, topdown=False):
+            if dict_file in files:
+                with open(os.path.join(root, dict_file), 'r') as fh:
+                    conf = pickle.load(fh)
+                exp = experiment_cls_(**conf)
+                session.add(exp)
+        session.commit()
+        session.close()
         raise NotImplementedError('Autoloading experiments from disk not '
                                   'implemented yet, please provide a load '
                                   'function.')
@@ -176,3 +186,9 @@ def select(*columns, **filters):
     rows = q.all()
     session.close()
     return rows
+
+
+class _Exp(object):
+    def __init__(self, **kwargs):
+        for k, v in kwargs.iteritems():
+            setattr(self, k, v)
