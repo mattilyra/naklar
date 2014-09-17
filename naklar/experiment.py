@@ -42,7 +42,8 @@ def _from_existing_db(tablename):
     return ExperimentBase
 
 
-def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id']):
+def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
+               autoload=True):
     conf = {}
     for root, _, files in os.walk(root_dir, topdown=False):
         if dict_filename in files:
@@ -75,6 +76,10 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id']):
                 table.append_column(column)
     mapper(_Exp, table)
     meta.create_all(bind=_engine)
+
+    if autoload:
+        populate_from_disk(root_dir, dict_filename)
+
     return _Exp
 
 
