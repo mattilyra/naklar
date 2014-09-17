@@ -42,7 +42,7 @@ def _from_existing_db(tablename):
     return ExperimentBase
 
 
-def _from_dict(root_dir, dict_filename='conf.pkl'):
+def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id']):
     conf = {}
     for root, _, files in os.walk(root_dir, topdown=False):
         if dict_filename in files:
@@ -63,8 +63,16 @@ def _from_dict(root_dir, dict_filename='conf.pkl'):
             if column_type().python_type is type(v):
                 if hasattr(v, 'split'):
                     column_type = String(len(v) * 2)
-        column = Column(k, column_type)
+        column = Column(k, column_type, primary_key=k in primary_keys)
         table.append_column(column)
+
+    # if the conf dictionary does not contain all of the primary key columns
+    # add the ones that are missing
+    if not all([k in table.c.keys() for k in primary_keys]):
+        for k in primary_keys:
+            if k not in table.c.keys():
+                column = Column(k, Integer, primary_key=True)
+                table.append_column(column)
     mapper(_Exp, table)
     meta.create_all(bind=_engine)
     return _Exp
