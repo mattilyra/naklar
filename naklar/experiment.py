@@ -1,4 +1,5 @@
 import os
+from os import path
 import re
 try:
     import cPickle as pickle
@@ -18,19 +19,6 @@ _engine = None
 ExperimentBase = declarative_base(cls=DeferredReflection)
 
 
-def connect(*args, **kwargs):
-    """Initialises a database connection to access the experiments DB.
-
-    :param args:
-    :param kwargs:
-    """
-    global _engine
-    if not args:
-        _engine = create_engine('sqlite:///:memory:', echo=False)
-    else:
-        _engine = create_engine(*args, **kwargs)
-
-
 def _from_existing_db(tablename):
     try:
         ExperimentBase.__tablename__ = tablename
@@ -43,7 +31,7 @@ def _from_existing_db(tablename):
 
 
 def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
-               autoload=True):
+               autoload=True, decorators={}):
     conf = {}
     for root, _, files in os.walk(root_dir, topdown=False):
         if dict_filename in files:
@@ -75,6 +63,17 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
             if k not in table.c.keys():
                 column = Column(k, Integer, primary_key=True)
                 table.append_column(column)
+
+    if decorators:
+        for k, (get, set, delete) in decorators.iteritems():
+            if callable(get) and callable(set) and callable(delete):
+                setattr(_Exp, k, property(get, set, delete))
+                setattr(_Exp, '_{}'.format(k), table.c[k])
+            else:
+                raise ValueError('Decorator functions must be callable. Found a'
+                                 ' decorator \'{}\' that is {}'
+                                 .format(k, v))
+
     mapper(_Exp, table)
     meta.create_all(bind=_engine)
 
@@ -86,10 +85,23 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
     return _Exp
 
 
-def initialise(experiment_table, *args, **kwargs):
+def connect(*args, **kwargs):
     """Initialises a database connection to access the experiments DB.
 
-    If no connection arguments are defined an in memory SQLite data base is
+    :param args:
+    :param kwargs:
+    """
+    global _engine
+    if not args:
+        _engine = create_engine('sqlite:///:memory:', echo=False)
+    else:
+        _engine = create_engine(*args, **kwargs)
+
+
+def initialise(experiment_table, *args, **kwargs):
+    """Initialises a database connection to access the experiments Table.
+
+    If no connection arguments are defined an in memory SQLite database is
     created. The experiments table is also created after initialising the
     connection.
 
