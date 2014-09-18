@@ -62,7 +62,7 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
         setattr(ExperimentBase, k, column)
 
     # create a dictionary that will be passed to the mapper
-    props = {}
+    # props = {}
 
     # if the conf dictionary does not contain all of the primary key columns
     # add the ones that are missing
@@ -90,6 +90,7 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
             #                      ' decorator \'{}\' that is {}'
             #                      .format(k, v))
 
+    ExperimentBase.metadata.create_all(_engine)
     ExperimentBase.prepare(_engine)
     # mapper(_Exp, table, properties=props)
     # meta.create_all(bind=_engine)
