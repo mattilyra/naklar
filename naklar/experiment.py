@@ -46,10 +46,14 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
                 elif k not in conf:
                     conf[k] = v
 
+    table_properties = {'__tablename__': 'experiment',
+                        '__mapper_args__': {'column_prefix': '_'},
+                        }
+
     # meta = MetaData(bind=_engine)
     # table = Table('experiment', meta)
-    ExperimentBase.__tablename__ = 'experiment'
-    ExperimentBase.__mapper_args__ = {'column_prefix': '_'}
+    # ExperimentBase.__tablename__ = 'experiment'
+    # ExperimentBase.__mapper_args__ = {'column_prefix': '_'}
     sql_types = [DateTime, Float, Integer, Boolean, String]
     for k, v in conf.iteritems():
         for column_type in sql_types:
@@ -59,7 +63,18 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
                 break
         column = Column(k, column_type, primary_key=k in primary_keys)
         # table.append_column(column)
-        setattr(ExperimentBase, k, column)
+        # setattr(ExperimentBase, k, column)
+
+        attrname = '_{}'.format(k)
+        table_properties[attrname] = column
+
+        def _g(self):
+            return getattr(self, attrname)
+
+        def _s(self, v):
+            setattr(self, attrname, v)
+
+        table_properties[k] = property(_g, _s)
 
     # create a dictionary that will be passed to the mapper
     # props = {}
@@ -77,10 +92,10 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
     #
     # if decorators:
     #     for k, (get, set, delete) in decorators.iteritems():
-            # if get is None:
-            #     def _g(self):
-            #         return getattr(self, '_{}'.format(k))
-            #     get = types.MethodType(_g, None, _Exp)
+            if get is None:
+                def _g(self):
+                    return getattr(self, '_{}'.format(k))
+                get = types.MethodType(_g, None, _Exp)
 
             # if callable(get) and callable(set) and callable(delete):
             # setattr(_Exp, k, property(get, set, delete))
@@ -89,15 +104,16 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
             #     raise ValueError('Decorator functions must be callable. Found a'
             #                      ' decorator \'{}\' that is {}'
             #                      .format(k, v))
-
-    ExperimentBase.metadata.create_all(_engine)
-    ExperimentBase.prepare(_engine)
+    print table_properties
+    Exp = types.ClassType('Exp', (ExperimentBase,), table_properties)
+    Exp.metadata.create_all(_engine)
+    Exp.prepare(_engine)
     # mapper(_Exp, table, properties=props)
     # meta.create_all(bind=_engine)
 
     if autoload:
         global experiment_cls_
-        experiment_cls_ = ExperimentBase
+        experiment_cls_ = Exp
         populate_from_disk(root_dir, dict_filename)
 
     return ExperimentBase
@@ -231,6 +247,7 @@ def populate_from_disk(root_directory, dict_file='conf.pkl', load_func=None):
             if dict_file in files:
                 with open(os.path.join(root, dict_file), 'r') as fh:
                     conf = pickle.load(fh)
+                print root, conf
                 exp = experiment_cls_(**conf)
                 session.add(exp)
         session.commit()
