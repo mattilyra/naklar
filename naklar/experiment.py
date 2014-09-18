@@ -1,6 +1,7 @@
 import os
 from os import path
 import re
+import types
 try:
     import cPickle as pickle
 except ImportError:
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session, mapper
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.ext.declarative import declarative_base, DeferredReflection
 from sqlalchemy.exc import NoSuchTableError
+from sqlalchemy.ext.hybrid import hybrid_property
 
 
 _engine = None
@@ -44,45 +46,60 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
                 elif k not in conf:
                     conf[k] = v
 
-    meta = MetaData(bind=_engine)
-    table = Table('experiment', meta)
-    types = [DateTime, Float, Integer, Boolean, String]
+    # meta = MetaData(bind=_engine)
+    # table = Table('experiment', meta)
+    ExperimentBase.__tablename__ = 'experiment'
+    ExperimentBase.__mapper_args__ = {'column_prefix': '_'}
+    sql_types = [DateTime, Float, Integer, Boolean, String]
     for k, v in conf.iteritems():
-        for column_type in types:
+        for column_type in sql_types:
             if column_type().python_type is type(v):
                 if hasattr(v, 'split'):
                     column_type = String(len(v) * 2)
                 break
         column = Column(k, column_type, primary_key=k in primary_keys)
-        table.append_column(column)
+        # table.append_column(column)
+        setattr(ExperimentBase, k, column)
+
+    # create a dictionary that will be passed to the mapper
+    props = {}
 
     # if the conf dictionary does not contain all of the primary key columns
     # add the ones that are missing
-    if not all([k in table.c.keys() for k in primary_keys]):
-        for k in primary_keys:
-            if k not in table.c.keys():
-                column = Column(k, Integer, primary_key=True)
-                table.append_column(column)
+    # if not all([k in table.c.keys() for k in primary_keys]):
+    #     for k in primary_keys:
+    #         if k not in table.c.keys():
+    #             column = Column(k, Integer, primary_key=True)
+    #             table.append_column(column)
+    #
+    #             if k in decorators:
+    #                 props['_{}'.format(k)] = table.c[k]
+    #
+    # if decorators:
+    #     for k, (get, set, delete) in decorators.iteritems():
+            # if get is None:
+            #     def _g(self):
+            #         return getattr(self, '_{}'.format(k))
+            #     get = types.MethodType(_g, None, _Exp)
 
-    if decorators:
-        for k, (get, set, delete) in decorators.iteritems():
-            if callable(get) and callable(set) and callable(delete):
-                setattr(_Exp, k, property(get, set, delete))
-                setattr(_Exp, '_{}'.format(k), table.c[k])
-            else:
-                raise ValueError('Decorator functions must be callable. Found a'
-                                 ' decorator \'{}\' that is {}'
-                                 .format(k, v))
+            # if callable(get) and callable(set) and callable(delete):
+            # setattr(_Exp, k, property(get, set, delete))
+            # setattr(_Exp, '_{}'.format(k), table.c[k])
+            # else:
+            #     raise ValueError('Decorator functions must be callable. Found a'
+            #                      ' decorator \'{}\' that is {}'
+            #                      .format(k, v))
 
-    mapper(_Exp, table)
-    meta.create_all(bind=_engine)
+    ExperimentBase.prepare(_engine)
+    # mapper(_Exp, table, properties=props)
+    # meta.create_all(bind=_engine)
 
     if autoload:
         global experiment_cls_
-        experiment_cls_ = _Exp
+        experiment_cls_ = ExperimentBase
         populate_from_disk(root_dir, dict_filename)
 
-    return _Exp
+    return ExperimentBase
 
 
 def connect(*args, **kwargs):
@@ -287,7 +304,8 @@ def select(*columns, **filters):
     return rows
 
 
-class _Exp(object):
-    def __init__(self, **kwargs):
-        for k, v in kwargs.iteritems():
-            setattr(self, k, v)
+# class _Exp(ExperimentBase):
+#     __mapper_args__ = {'column_prefix': '_'}
+    # def __init__(self, **kwargs):
+    #     for k, v in kwargs.iteritems():
+    #         setattr(self, k, v)
