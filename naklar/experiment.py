@@ -131,7 +131,7 @@ def _set_{0}(self, v):
         experiment_cls_ = Exp
         populate_from_disk(root_dir, dict_filename)
 
-    return ExperimentBase
+    return Exp
 
 
 def connect(*args, **kwargs):
