@@ -68,13 +68,14 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
         attrname = '_{}'.format(k)
         table_properties[attrname] = column
 
-        def _g(self):
-            return getattr(self, attrname)
+        # def _g(self):
+        #     return getattr(self, '_{}'.format(k))
+        #
+        # def _s(self, v):
+        #     setattr(self, '_{}'.format(k), v)
 
-        def _s(self, v):
-            setattr(self, attrname, v)
-
-        table_properties[k] = property(_g, _s)
+        # getter = types.MethodType(_g, None, Exp)
+        # table_properties[k] = property(_g, _s)
 
     # create a dictionary that will be passed to the mapper
     # props = {}
@@ -92,10 +93,10 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
     #
     # if decorators:
     #     for k, (get, set, delete) in decorators.iteritems():
-            if get is None:
-                def _g(self):
-                    return getattr(self, '_{}'.format(k))
-                get = types.MethodType(_g, None, _Exp)
+    #         if get is None:
+    #             def _g(self):
+    #                 return getattr(self, '_{}'.format(k))
+    #             get = types.MethodType(_g, None, _Exp)
 
             # if callable(get) and callable(set) and callable(delete):
             # setattr(_Exp, k, property(get, set, delete))
@@ -106,6 +107,20 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
             #                      .format(k, v))
     print table_properties
     Exp = types.ClassType('Exp', (ExperimentBase,), table_properties)
+
+    for k in conf:
+        code = """
+def _get_{0}(self):
+    return self._{0}
+
+def _set_{0}(self, v):
+    self._{0} = v
+    """.format(k)
+        d = {}
+        exec code in d
+        setattr(Exp, k, property(d['_get_{}'.format(k)],
+                                 d['_set_{}'.format(k)]))
+
     Exp.metadata.create_all(_engine)
     Exp.prepare(_engine)
     # mapper(_Exp, table, properties=props)
