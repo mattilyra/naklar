@@ -46,14 +46,12 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
                 elif k not in conf:
                     conf[k] = v
 
+    # create the table properties dictionary that will be fed to python types
+    # module when creating the experiment class
     table_properties = {'__tablename__': 'experiment',
                         '__mapper_args__': {'column_prefix': '_'},
                         }
 
-    # meta = MetaData(bind=_engine)
-    # table = Table('experiment', meta)
-    # ExperimentBase.__tablename__ = 'experiment'
-    # ExperimentBase.__mapper_args__ = {'column_prefix': '_'}
     sql_types = [DateTime, Float, Integer, Boolean, String]
     for k, v in conf.iteritems():
         for column_type in sql_types:
@@ -62,69 +60,60 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
                     column_type = String(len(v) * 2)
                 break
         column = Column(k, column_type, primary_key=k in primary_keys)
-        # table.append_column(column)
-        # setattr(ExperimentBase, k, column)
-
         attrname = '_{}'.format(k)
         table_properties[attrname] = column
 
-        # def _g(self):
-        #     return getattr(self, '_{}'.format(k))
-        #
-        # def _s(self, v):
-        #     setattr(self, '_{}'.format(k), v)
-
-        # getter = types.MethodType(_g, None, Exp)
-        # table_properties[k] = property(_g, _s)
-
-    # create a dictionary that will be passed to the mapper
-    # props = {}
-
     # if the conf dictionary does not contain all of the primary key columns
-    # add the ones that are missing
-    # if not all([k in table.c.keys() for k in primary_keys]):
-    #     for k in primary_keys:
-    #         if k not in table.c.keys():
-    #             column = Column(k, Integer, primary_key=True)
-    #             table.append_column(column)
-    #
-    #             if k in decorators:
-    #                 props['_{}'.format(k)] = table.c[k]
-    #
-    # if decorators:
-    #     for k, (get, set, delete) in decorators.iteritems():
-    #         if get is None:
-    #             def _g(self):
-    #                 return getattr(self, '_{}'.format(k))
-    #             get = types.MethodType(_g, None, _Exp)
+    # add the ones that are missing - this ensures that if no primary_keys
+    # are defined at least a default id integer column is created
+    if not all(['_{}'.format(k) in table_properties for k in primary_keys]):
+        for k in primary_keys:
+            attrname = '_{}'.format(k)
+            if attrname not in table_properties:
+                column = Column(k, Integer, primary_key=True)
+                table_properties[attrname] = column
 
-            # if callable(get) and callable(set) and callable(delete):
-            # setattr(_Exp, k, property(get, set, delete))
-            # setattr(_Exp, '_{}'.format(k), table.c[k])
-            # else:
-            #     raise ValueError('Decorator functions must be callable. Found a'
-            #                      ' decorator \'{}\' that is {}'
-            #                      .format(k, v))
-    print table_properties
+    code_get = 'def _get_{0}(self): return self._{0}'
+    code_set = 'def _set_{0}(self, v): self._{0} = v'
+    code_del = 'def _del_{0}(self): del(self._{0})'
+
     Exp = types.ClassType('Exp', (ExperimentBase,), table_properties)
-
     for k in conf:
-        code = """
-def _get_{0}(self):
-    return self._{0}
-
-def _set_{0}(self, v):
-    self._{0} = v
-    """.format(k)
         d = {}
-        exec code in d
+        if k in decorators:
+            funcs = decorators[k]
+            if len(funcs) == 3:
+                g, s, d = funcs
+                d['_get_{}'.format(k)] = g
+                d['_set_{}'.format(k)] = s
+                d['_del_{}'.format(k)] = d
+            elif len(funcs) == 2:
+                g, s = funcs
+                exec code_del.format(k) in d
+                d['_get_{}'.format(k)] = g
+                d['_set_{}'.format(k)] = s
+            elif len(funcs) == 1:
+                g, = funcs
+                exec code_set.format(k) in d
+                exec code_del.format(k) in d
+                d['_get_{}'.format(k)] = g
+            else:
+                raise ValueError('There should be no more than 3 and no less '
+                                 'than 1 decorator methods provided for key'
+                                 '\'{}\', found {}. The method tuple should '
+                                 'contain (getter, [setter, [deleter]]).'
+                                 .format(k, len(funcs)))
+        else:
+            exec code_get.format(k) in d
+            exec code_set.format(k) in d
+            exec code_del.format(k) in d
+
         setattr(Exp, k, property(d['_get_{}'.format(k)],
-                                 d['_set_{}'.format(k)]))
+                                 d['_set_{}'.format(k)],
+                                 d['_del_{}'.format(k)]))
 
     Exp.metadata.create_all(_engine)
     Exp.prepare(_engine)
-    # mapper(_Exp, table, properties=props)
-    # meta.create_all(bind=_engine)
 
     if autoload:
         global experiment_cls_
