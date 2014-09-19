@@ -73,44 +73,46 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
                 column = Column(k, Integer, primary_key=True)
                 table_properties[attrname] = column
 
-    code_get = 'def _get_{0}(self): return self._{0}'
-    code_set = 'def _set_{0}(self, v): self._{0} = v'
-    code_del = 'def _del_{0}(self): del(self._{0})'
+    code_get = ('def _get_{0}(self):\n\t'
+                    '_{0} = self._{0}\n\t'
+                    'if callable({1}):\n\t\t'
+                        '_{0} = {1}(_{0})\n\t'
+                    'return _{0}')
+
+    code_set = ('def _set_{0}(self, v):\n\t'
+                'if callable({1}):\n\t\t'
+                    'v = {1}(v)\n\t'
+                'self._{0} = v')
 
     Exp = types.ClassType('Exp', (ExperimentBase,), table_properties)
     for k in conf:
         d = {}
         if k in decorators:
             funcs = decorators[k]
-            if len(funcs) == 3:
-                g, s, d = funcs
-                d['_get_{}'.format(k)] = g
-                d['_set_{}'.format(k)] = s
-                d['_del_{}'.format(k)] = d
-            elif len(funcs) == 2:
+            if len(funcs) == 2:
                 g, s = funcs
-                exec code_del.format(k) in d
-                d['_get_{}'.format(k)] = g
-                d['_set_{}'.format(k)] = s
-            elif len(funcs) == 1:
-                g, = funcs
-                exec code_set.format(k) in d
-                exec code_del.format(k) in d
-                d['_get_{}'.format(k)] = g
+                if callable(g):
+                    exec code_get.format(k, g.__name__) in d
+                    d[g.__name__] = g
+                else:
+                    exec code_get.format(k, None) in d
+
+                if callable(s):
+                    exec code_set.format(k, s.__name__) in d
+                    d[s.__name__] = s
+                else:
+                    exec code_set.format(k, None) in d
             else:
-                raise ValueError('There should be no more than 3 and no less '
-                                 'than 1 decorator methods provided for key'
-                                 '\'{}\', found {}. The method tuple should '
-                                 'contain (getter, [setter, [deleter]]).'
-                                 .format(k, len(funcs)))
+                raise ValueError('There should exactly 2 decorator methods '
+                                 'provided for key \'{}\', found {}. The '
+                                 'method tuple should contain ([getter], '
+                                 '[setter]).'.format(k, len(funcs)))
         else:
-            exec code_get.format(k) in d
-            exec code_set.format(k) in d
-            exec code_del.format(k) in d
+            exec code_get.format(k, None) in d
+            exec code_set.format(k, None) in d
 
         setattr(Exp, k, property(d['_get_{}'.format(k)],
-                                 d['_set_{}'.format(k)],
-                                 d['_del_{}'.format(k)]))
+                                 d['_set_{}'.format(k)]))
 
     Exp.metadata.create_all(_engine)
     Exp.prepare(_engine)
@@ -251,7 +253,6 @@ def populate_from_disk(root_directory, dict_file='conf.pkl', load_func=None):
             if dict_file in files:
                 with open(os.path.join(root, dict_file), 'r') as fh:
                     conf = pickle.load(fh)
-                print root, conf
                 exp = experiment_cls_(**conf)
                 session.add(exp)
         session.commit()
