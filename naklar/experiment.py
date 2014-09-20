@@ -46,6 +46,7 @@ def _decorate_function(f, f_code, d, key):
 
     return d
 
+
 def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
                autoload=True, decorators={}):
     conf = {}
@@ -116,8 +117,8 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
             exec code_get.format(k, None) in d
             exec code_set.format(k, None) in d
 
-        setattr(Exp, k, property(d['_get_{}'.format(k)],
-                                 d['_set_{}'.format(k)]))
+        setattr(Exp, k, hybrid_property(d['_get_{}'.format(k)],
+                                        d['_set_{}'.format(k)]))
 
     Exp.metadata.create_all(_engine)
     Exp.prepare(_engine)
@@ -258,7 +259,9 @@ def populate_from_disk(root_directory, dict_file='conf.pkl', load_func=None):
             if dict_file in files:
                 with open(os.path.join(root, dict_file), 'r') as fh:
                     conf = pickle.load(fh)
-                exp = experiment_cls_(**conf)
+                exp = experiment_cls_()
+                for k, v in conf.iteritems():
+                    setattr(exp, k, v)
                 session.add(exp)
         session.commit()
         session.close()
