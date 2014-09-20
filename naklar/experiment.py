@@ -2,6 +2,7 @@ import os
 from os import path
 import re
 import types
+import functools
 try:
     import cPickle as pickle
 except ImportError:
@@ -31,6 +32,19 @@ def _from_existing_db(tablename):
                                .format(tablename))
     return ExperimentBase
 
+
+def _decorate_function(f, f_code, d, key):
+    if callable(f):
+        if isinstance(f, functools.partial):
+            fname = f.func.__name__
+        else:
+            fname = f.__name__
+        exec f_code.format(key, fname) in d
+        d[fname] = f
+    else:
+        exec f_code.format(key, None) in d
+
+    return d
 
 def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
                autoload=True, decorators={}):
@@ -91,17 +105,8 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
             funcs = decorators[k]
             if len(funcs) == 2:
                 g, s = funcs
-                if callable(g):
-                    exec code_get.format(k, g.__name__) in d
-                    d[g.__name__] = g
-                else:
-                    exec code_get.format(k, None) in d
-
-                if callable(s):
-                    exec code_set.format(k, s.__name__) in d
-                    d[s.__name__] = s
-                else:
-                    exec code_set.format(k, None) in d
+                d = _decorate_function(g, code_get, d, k)
+                d = _decorate_function(s, code_set, d, k)
             else:
                 raise ValueError('There should exactly 2 decorator methods '
                                  'provided for key \'{}\', found {}. The '
