@@ -47,6 +47,20 @@ def _decorate_function(f, f_code, d, key):
     return d
 
 
+def _find_conf_files(root_dir, dict_filename='conf.pkl'):
+    for root, _, files in os.walk(root_dir, topdown=False):
+        if dict_filename in files:
+            pth = os.path.join(root, dict_filename)
+            with open(pth, 'r') as fh:
+                yield fh
+
+
+def _read_conf_dicts(itr):
+    for fh in itr:
+        d = pickle.load(fh)
+        yield d
+
+
 def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
                autoload=True, decorators={}):
     conf = {}
