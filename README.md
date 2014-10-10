@@ -1,4 +1,4 @@
-naklar
+naklar [na'klaɐ̯]
 ======
 
 Naklar is a support framework for managing experiments with a focus on staying out of the way and providing and easy way to select experiment(s) based on SQL style queries.
