@@ -3,6 +3,7 @@ from os import path
 import re
 import types
 import functools
+import collections
 try:
     import cPickle as pickle
 except ImportError:
@@ -275,6 +276,8 @@ def populate_from_disk(root_directory, dict_file='conf.pkl', load_func=None):
                     conf = pickle.load(fh)
                 exp = experiment_cls_()
                 for k, v in conf.iteritems():
+                    if isinstance(v, collections.Container):
+                        v = str(v)
                     setattr(exp, k, v)
                 session.add(exp)
         session.commit()
