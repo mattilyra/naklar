@@ -68,8 +68,12 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
     for root, _, files in os.walk(root_dir, topdown=False):
         if dict_filename in files:
             pth = os.path.join(root, dict_filename)
-            with open(pth, 'r') as fh:
-                d = pickle.load(fh)
+            try:
+                with open(pth, 'r') as fh:
+                    d = pickle.load(fh)
+            except EOFError:
+                print(pth)
+                raise
             for k, v in d.iteritems():
                 if k in conf and (conf[k] is None and v is not None):
                     conf[k] = v
@@ -352,8 +356,7 @@ def select(*columns, **filters):
     return rows
 
 
-# class _Exp(ExperimentBase):
-#     __mapper_args__ = {'column_prefix': '_'}
-    # def __init__(self, **kwargs):
-    #     for k, v in kwargs.iteritems():
-    #         setattr(self, k, v)
+def reset():
+    connect()
+    global ExperimentBase
+    ExperimentBase = declarative_base(cls=DeferredReflection)
