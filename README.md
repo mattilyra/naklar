@@ -72,3 +72,8 @@ usage
                         autoload=True, dict_filename='conf.joblib',
                         load_func=load_func,
                         restrict_keys=set(['alpha', 'eta', 'path']))
+
+what's missing
+==============
+- an easy way to inspect parameters (the keys) for experiments
+- ...
