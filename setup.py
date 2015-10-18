@@ -31,9 +31,8 @@ setup(
     name='naklar',
     author='Matti Lyra',
     description='A package for handling large collections of result sets from experimentation.',
-    version='0.1b',
+    version='0.2',
 
-    # make the build_ext command map to that defined by Cython.Distutils
     cmdclass={'test': PyTest},
 
     packages=['naklar',],

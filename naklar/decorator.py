@@ -20,6 +20,8 @@ def translate_path(path, ptrn, replace):
     >>> os.listdir(os.getcwd()) # ['.', '..', 'experiments']
     >>> translate_path(pth) # /usr
     """
+    if path is None:
+        return path
     pth = re.sub(ptrn, replace, path)
     pth = os.path.expandvars(pth)
     pth = os.path.expanduser(pth)

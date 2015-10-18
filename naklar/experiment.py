@@ -18,6 +18,7 @@ from sqlalchemy.ext.declarative import declarative_base, DeferredReflection
 from sqlalchemy.exc import NoSuchTableError
 from sqlalchemy.ext.hybrid import hybrid_property
 
+import six
 
 _engine = None
 ExperimentBase = declarative_base(cls=DeferredReflection)
@@ -40,10 +41,10 @@ def _decorate_function(f, f_code, d, key):
             fname = f.func.__name__
         else:
             fname = f.__name__
-        exec f_code.format(key, fname) in d
+        exec(f_code.format(key, fname) in d)
         d[fname] = f
     else:
-        exec f_code.format(key, None) in d
+        exec(f_code.format(key, None) in d)
 
     return d
 
@@ -63,18 +64,26 @@ def _read_conf_dicts(itr):
 
 
 def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
-               autoload=True, decorators={}):
+               autoload=True, decorators={}, restrict_keys=None, **kwargs):
     conf = {}
     for root, _, files in os.walk(root_dir, topdown=False):
         if dict_filename in files:
             pth = os.path.join(root, dict_filename)
             try:
-                with open(pth, 'r') as fh:
-                    d = pickle.load(fh)
+                if 'load_func' in kwargs:
+                    d = kwargs['load_func'](pth)
+                else:
+                    with open(pth, 'rb') as fh:
+                        d = pickle.load(fh)
             except EOFError:
                 print(pth)
                 raise
-            for k, v in d.iteritems():
+            keys = d.keys()
+            if restrict_keys is not None:
+                keys = d.keys() & restrict_keys
+
+            for k in keys:
+                v = d[k]
                 if k in conf and (conf[k] is None and v is not None):
                     conf[k] = v
                 elif k not in conf:
@@ -87,7 +96,7 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
                         }
 
     sql_types = [DateTime, Float, Integer, Boolean, String]
-    for k, v in conf.iteritems():
+    for k, v in six.iteritems(conf):
         for column_type in sql_types:
             if column_type().python_type is type(v):
                 if hasattr(v, 'split'):
@@ -118,7 +127,11 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
                     'v = {1}(v)\n\t'
                 'self._{0} = v')
 
-    Exp = types.ClassType('Exp', (ExperimentBase,), table_properties)
+    # create a runtime class Exp that is going to be the experiment table
+    # definition for sqlalchemy
+    Exp = type('Exp', (ExperimentBase,), table_properties)
+
+    # create getter and setter for each key loaded from disk
     for k in conf:
         d = {}
         if k in decorators:
@@ -128,13 +141,14 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
                 d = _decorate_function(g, code_get, d, k)
                 d = _decorate_function(s, code_set, d, k)
             else:
-                raise ValueError('There should exactly 2 decorator methods '
+                raise ValueError('There should be exactly 2 decorator methods '
                                  'provided for key \'{}\', found {}. The '
-                                 'method tuple should contain ([getter], '
-                                 '[setter]).'.format(k, len(funcs)))
+                                 'method tuple should contain (getter, '
+                                 'setter).'.format(k, len(funcs)))
         else:
-            exec code_get.format(k, None) in d
-            exec code_set.format(k, None) in d
+            # execute the get and set methods in d's context
+            exec(code_get.format(k, None), {}, d)
+            exec(code_set.format(k, None), {}, d)
 
         setattr(Exp, k, hybrid_property(d['_get_{}'.format(k)],
                                         d['_set_{}'.format(k)]))
@@ -145,7 +159,7 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
     if autoload:
         global experiment_cls_
         experiment_cls_ = Exp
-        populate_from_disk(root_dir, dict_filename)
+        populate_from_disk(root_dir, dict_filename, **kwargs)
 
     return Exp
 
@@ -267,23 +281,20 @@ def initialise(experiment_table, *args, **kwargs):
 
 
 def populate_from_disk(root_directory, dict_file='conf.pkl', load_func=None):
-    if load_func is not None:
-        session = Session(bind=_engine)
-        load_func(root_directory, session)
-        session.commit()
-        session.close()
-    else:
-        session = Session(bind=_engine)
-        for root, _, files in os.walk(root_directory, topdown=False):
-            if dict_file in files:
-                with open(os.path.join(root, dict_file), 'r') as fh:
+    session = Session(bind=_engine)
+    for root, _, files in os.walk(root_directory, topdown=False):
+        if dict_file in files:
+            if load_func is None:
+                with open(os.path.join(root, dict_file), 'rb') as fh:
                     conf = pickle.load(fh)
-                exp = experiment_cls_()
-                for k, v in conf.iteritems():
-                    if isinstance(v, collections.Container):
-                        v = str(v)
-                    setattr(exp, k, v)
-                session.add(exp)
+            else:
+                conf = load_func(os.path.join(root, dict_file))
+            exp = experiment_cls_()
+            for k, v in six.iteritems(conf):
+                if isinstance(v, collections.Container):
+                    v = str(v)
+                setattr(exp, k, v)
+            session.add(exp)
         session.commit()
         session.close()
 
