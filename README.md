@@ -30,21 +30,9 @@ usage
 
     # get all experiments
     experiment.select()
-        [<naklar.experiment.Exp at 0x10cf128d0>,
-         <naklar.experiment.Exp at 0x10cf12940>,
-         <naklar.experiment.Exp at 0x10cf129e8>,
-         <naklar.experiment.Exp at 0x10cf12a90>,
-         <naklar.experiment.Exp at 0x10cf12b38>,
-         <naklar.experiment.Exp at 0x10cf12be0>,
-         <naklar.experiment.Exp at 0x10cf12c88>,
-         <naklar.experiment.Exp at 0x10cf12d30>,
-         <naklar.experiment.Exp at 0x10cf12dd8>,
-         <naklar.experiment.Exp at 0x10cf12e80>,
-         <naklar.experiment.Exp at 0x10cf12f28>,
-         <naklar.experiment.Exp at 0x10cf12fd0>]
 
     # get only those where C=1
-    experiment.select(C=1)
+    # you need to know which parameters are present
     for exp in experiment.select(C=1)
         print(exp.C, exp.kernel, exp.path)
 
