@@ -44,7 +44,6 @@ usage
          <naklar.experiment.Exp at 0x10cf12fd0>]
 
     # get only those where C=1
-    # get all experiments
     experiment.select(C=1)
     for exp in experiment.select(C=1)
         print(exp.C, exp.kernel, exp.path)
