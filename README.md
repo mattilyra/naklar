@@ -22,7 +22,8 @@ Naklar uses a data base to search / store and retrieve experiment results and de
 
 usage
 =====
-    # load a settings.pkl pickled dictionaries from disk
+
+## load a settings.pkl pickled dictionaries from disk
     from naklar import experiment
     experiment.initialise('./results/',
                           autoload=True,
@@ -36,7 +37,7 @@ usage
     for exp in experiment.select(C=1)
         print(exp.C, exp.kernel, exp.path)
 
-    # load joblib dumps
+## load joblib dumps
     from functools import partial
     from naklar import experiment
     import joblib
@@ -46,8 +47,7 @@ usage
                           autoload=True, dict_filename='conf.joblib',
                           load_func=load_func)
 
-    # only load certain keys if some of the values are not compatible with
-    # sqlalchemy, for instance NumPy arrays
+## only load certain keys if some of the values are not compatible with sqlalchemy, for instance NumPy arrays
     from functools import partial
     from naklar import experiment
     import joblib
