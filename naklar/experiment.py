@@ -354,7 +354,7 @@ def select(*columns, **filters):
 
     if filters:
         filts = []
-        for k, v in filters.iteritems():
+        for k, v in six.iteritems(filters):
             if hasattr(v, 'split'):
                 filts.append(getattr(experiment_cls_, k) == v)
             elif hasattr(v, '__getitem__') or hasattr(v, '__iter__'):
