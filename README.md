@@ -61,5 +61,5 @@ usage
 
 what's missing
 ==============
-- an easy way to inspect parameters (the keys) for experiments
+- an easy way to inspect what parameters (the keys) are defined for experiments
 - ...
