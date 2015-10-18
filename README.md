@@ -16,4 +16,6 @@ Naklar uses a data base to search / store and retrieve experiment results and de
 - sqlalchemy
   - Under the hood naklar uses sqlalchemy to perform data base queries
 - SQLite / MySQL / PyMysql
-  - for accessing a data base 
+  - for accessing a data base
+- six
+    - for Py2/3 compatibility
