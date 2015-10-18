@@ -48,7 +48,6 @@ usage
     for exp in experiment.select(C=1)
         print(exp.C, exp.kernel, exp.path)
 
-
     # load joblib dumps
     from functools import partial
     from naklar import experiment
@@ -59,13 +58,13 @@ usage
                           autoload=True, dict_filename='conf.joblib',
                           load_func=load_func)
 
-
     # only load certain keys if some of the values are not compatible with
     # sqlalchemy, for instance NumPy arrays
     from functools import partial
     from naklar import experiment
     import joblib
 
+    # use memmap to avoid expensive unnecessary load operations
     load_func = partial(joblib.load, mmap_mode='r')
     experiment.initialise('./results/', primary_keys=['job_id', 'task_id'],
                         autoload=True, dict_filename='conf.joblib',
