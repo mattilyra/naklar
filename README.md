@@ -23,6 +23,8 @@ Naklar uses a data base to search / store and retrieve experiment results and de
 usage
 =====
 
+Better and more complete examples will eventually be here http://nbviewer.ipython.org/github/mattilyra/naklar/blob/master/examples/naklar_examples.ipynb
+
 ### load settings.pkl pickled dictionaries from disk
     from naklar import experiment
     experiment.initialise('./results/',
