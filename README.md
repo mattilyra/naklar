@@ -23,7 +23,7 @@ Naklar uses a data base to search / store and retrieve experiment results and de
 usage
 =====
 
-### load a settings.pkl pickled dictionaries from disk
+### load settings.pkl pickled dictionaries from disk
     from naklar import experiment
     experiment.initialise('./results/',
                           autoload=True,
