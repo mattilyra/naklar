@@ -3,6 +3,9 @@ naklar [na'klaɐ̯]
 
 Naklar is a support framework for managing experiments with a focus on staying out of the way and providing and easy way to select experiment(s) based on SQL style queries.
 
+There is a host of libraries already that allow you to configure and run experiments, naklar _does not care_, you run your experiment where ever, when ever, how ever. At the end of them there is a dictionary recording the settings and what ever else you wish to keep track of.
+
+
 
 features
 ========
