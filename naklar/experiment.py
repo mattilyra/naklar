@@ -12,6 +12,7 @@ except ImportError:
 from sqlalchemy import create_engine, func
 from sqlalchemy import Column, Integer, String, DateTime, Float, MetaData, \
     Table, Boolean
+from sqlalchemy.sql.elements import BinaryExpression
 from sqlalchemy.orm import Session, mapper
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.ext.declarative import declarative_base, DeferredReflection
@@ -63,12 +64,12 @@ def _read_conf_dicts(itr):
         yield d
 
 
-def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
+def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=['id'],
                autoload=True, decorators={}, restrict_keys=None, **kwargs):
     conf = {}
     for root, _, files in os.walk(root_dir, topdown=False):
-        if dict_filename in files:
-            pth = os.path.join(root, dict_filename)
+        if dict_file in files:
+            pth = os.path.join(root, dict_file)
             try:
                 if 'load_func' in kwargs:
                     d = kwargs['load_func'](pth)
@@ -157,9 +158,9 @@ def _from_dict(root_dir, dict_filename='conf.pkl', primary_keys=['id'],
     Exp.prepare(_engine)
 
     if autoload:
-        global experiment_cls_
-        experiment_cls_ = Exp
-        populate_from_disk(root_dir, dict_filename, **kwargs)
+        global E
+        E = Exp
+        populate_from_disk(root_dir, dict_file, **kwargs)
 
     return Exp
 
@@ -260,19 +261,19 @@ def initialise(experiment_table, *args, **kwargs):
     if _engine is None:
         connect(*args, **kwargs)
 
-    global experiment_cls_
+    global E
     if hasattr(experiment_table, 'split'):
         # connect to a data base that does contain the experiments table
         # and infer the Experiment class via reflection
         if os.path.exists(experiment_table):
-            experiment_cls_ = _from_dict(experiment_table, *args, **kwargs)
+            E = _from_dict(experiment_table, *args, **kwargs)
         else:
-            experiment_cls_ = _from_existing_db(experiment_table)
+            E = _from_existing_db(experiment_table)
     elif ExperimentBase in experiment_table.__bases__:
         # connect to a database and create a new table
         experiment_table.metadata.create_all(_engine)
         ExperimentBase.prepare(_engine)
-        experiment_cls_ = experiment_table
+        E = experiment_table
     else:
         raise ValueError('Experiment class must extend '
                          'naklar.experiment.ExperimentBase, be a refence to a '
@@ -289,7 +290,7 @@ def populate_from_disk(root_directory, dict_file='conf.pkl', load_func=None):
                     conf = pickle.load(fh)
             else:
                 conf = load_func(os.path.join(root, dict_file))
-            exp = experiment_cls_()
+            exp = E()
             for k, v in six.iteritems(conf):
                 if isinstance(v, collections.Container):
                     v = str(v)
@@ -306,7 +307,7 @@ def select(*columns, **filters):
     ----------
     session : Session
 
-    *columns : str, unicode or InstrumentedAttribute, optional
+    *columns : str or InstrumentedAttribute, optional
         Optional parameters to retrieve only specific column values
         from the Experiment table. If none are specified the whole
         Experiment object is returned.
@@ -317,7 +318,7 @@ def select(*columns, **filters):
     Returns
     -------
     list
-        A list of Experiment or KeyedTuple.
+        A list of Experiment objects or KeyedTuples.
 
 
     See Also
@@ -328,39 +329,43 @@ def select(*columns, **filters):
 
     Retrieve all Experiments where Experiment.k == 2
 
-    >> session = load_experiments('.')
-    >> rows = get_rows(session, k=2)
+    >> initialise('.')
+    >> rows = select(k=2)
 
     Retrieve specific columns from Experiments where Experiment.k == 2
 
-    >> session = load_experiments('.')
-    >> rows = get_rows(session, 'model_type', 'results_file', k=2)
+    >> initialise('.')
+    >> rows = select('model_type', 'results_file', k=2)
 
-    >> session = load_experiments('.')
-    >> rows = get_rows(session, 'model_type', 'results_file', k=[1, 2, 3, 5, 8])
+    >> initialise('.')
+    >> rows = select('model_type', 'results_file', k=[1, 2, 3, 5, 8])
     """
+    cols, filts = [], []
     if columns:
-        cols = []
         for col in columns:
-            if isinstance(col, (str, unicode)):
-                cols.append(getattr(experiment_cls_, col))
+            if isinstance(col, six.string_types):
+                cols.append(getattr(E, col))
             elif isinstance(col, InstrumentedAttribute):
                 cols.append(col)
-    else:
-        cols = [experiment_cls_]
+            elif isinstance(col, BinaryExpression):
+                filts.append(col)
+
+    if not cols: # in case all *args were BinaryExpression (filters)
+        cols = [E]
 
     session = Session(bind=_engine)
     q = session.query(*cols)
 
-    if filters:
-        filts = []
+    if filters or filts:
         for k, v in six.iteritems(filters):
-            if hasattr(v, 'split'):
-                filts.append(getattr(experiment_cls_, k) == v)
+            if isinstance(v, BinaryExpression):
+                filts.append(v)
+            elif hasattr(v, 'split'):
+                filts.append(getattr(E, k) == v)
             elif hasattr(v, '__getitem__') or hasattr(v, '__iter__'):
-                filts.append(getattr(experiment_cls_, k).in_(v))
+                filts.append(getattr(E, k).in_(v))
             else:
-                filts.append(getattr(experiment_cls_, k) == v)
+                filts.append(getattr(E, k) == v)
         q = q.filter(*filts)
     rows = q.all()
     session.close()
