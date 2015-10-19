@@ -1,3 +1,4 @@
+import sys
 import os
 from os import path
 import re
@@ -42,10 +43,17 @@ def _decorate_function(f, f_code, d, key):
             fname = f.func.__name__
         else:
             fname = f.__name__
-        exec(f_code.format(key, fname) in d)
+
+        # fname = '_{}'.format(fname)
+        # mod = sys.modules[globals()['__name__']]
+        # setattr(mod, fname, f)
+
+        exec(f_code.format(key, fname), {}, d)
+        print(fname in globals())
         d[fname] = f
+        print(d)
     else:
-        exec(f_code.format(key, None) in d)
+        exec(f_code.format(key, None), {}, d)
 
     return d
 
@@ -62,6 +70,22 @@ def _read_conf_dicts(itr):
     for fh in itr:
         d = pickle.load(fh)
         yield d
+
+
+def bind_get(prop_name, f=None):
+    # if bind_name is None:
+    #     bind_name = prop_name
+    def _get(self):
+        v = getattr(self, '_{}'.format(prop_name))
+        if callable(f):
+            v = f(v)
+        return v
+    _get.__name__ = '_get_{}'.format(prop_name)
+    return _get
+
+
+def expr(cls):
+    return cls
 
 
 def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=['id'],
@@ -120,7 +144,7 @@ def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=['id'],
     code_get = ('def _get_{0}(self):\n\t'
                     '_{0} = self._{0}\n\t'
                     'if callable({1}):\n\t\t'
-                        '_{0} = {1}(_{0})\n\t'
+                        '_{0} = {1}(self)\n\t'
                     'return _{0}')
 
     code_set = ('def _set_{0}(self, v):\n\t'
@@ -139,8 +163,12 @@ def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=['id'],
             funcs = decorators[k]
             if len(funcs) == 2:
                 g, s = funcs
-                d = _decorate_function(g, code_get, d, k)
-                d = _decorate_function(s, code_set, d, k)
+                g = bind_get(k, g)
+                # d = _decorate_function(g, code_get, d, k)
+                # d = _decorate_function(s, code_set, d, k)
+                # print(d)
+                exec(code_set.format(k, None), {}, d)
+                prop = hybrid_property(g, d['_set_{}'.format(k)], None, expr)
             else:
                 raise ValueError('There should be exactly 2 decorator methods '
                                  'provided for key \'{}\', found {}. The '
@@ -148,11 +176,11 @@ def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=['id'],
                                  'setter).'.format(k, len(funcs)))
         else:
             # execute the get and set methods in d's context
-            exec(code_get.format(k, None), {}, d)
+            # exec(code_get.format(k, None), {}, d)
             exec(code_set.format(k, None), {}, d)
-
-        setattr(Exp, k, hybrid_property(d['_get_{}'.format(k)],
-                                        d['_set_{}'.format(k)]))
+            g = bind_get(k)
+            prop = hybrid_property(g, d['_set_{}'.format(k)])
+        setattr(Exp, k, prop)
 
     Exp.metadata.create_all(_engine)
     Exp.prepare(_engine)
