@@ -1,6 +1,7 @@
 import os
 from os import path
 import re
+import glob
 import types
 import functools
 import collections
@@ -79,7 +80,7 @@ def _load_conf(pth, load_func=None):
 def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=['id'],
                autoload=True, decorators={}, restrict_keys=None, **kwargs):
     conf = {}
-    for pth in configs_from(root_dir, dict_file=dict_file):
+    for pth in find_files(root_dir, dict_file=dict_file):
         d = _load_conf(pth, **kwargs)
         keys = d.keys()
         if restrict_keys is not None:
@@ -170,10 +171,13 @@ def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=['id'],
     return Exp
 
 
-def configs_from(root_dir, dict_file='conf.pkl'):
+def find_files(root_dir, filename='conf.pkl'):
+    root_dir = os.path.expandvars(root_dir)
+    root_dir = os.path.abspath(os.path.expanduser(root_dir))
     for root, _, files in os.walk(root_dir, topdown=False):
-        if dict_file in files:
+        if filename in files:
             pth = os.path.join(root, dict_file)
+            pth = os.path.abspath(pth)
             yield pth
 
 
