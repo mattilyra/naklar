@@ -80,7 +80,7 @@ def _load_conf(pth, load_func=None):
 def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=['id'],
                autoload=True, decorators={}, restrict_keys=None, **kwargs):
     conf = {}
-    for pth in find_files(root_dir, dict_file=dict_file):
+    for pth in find_files(root_dir, filename=dict_file):
         d = _load_conf(pth, **kwargs)
         keys = d.keys()
         if restrict_keys is not None:
