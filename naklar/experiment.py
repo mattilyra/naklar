@@ -172,13 +172,17 @@ def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=['id'],
 
 
 def find_files(root_dir, filename='conf.pkl'):
+    """A generator over files called `filename` in any subdirectory of root.
+    """
     root_dir = os.path.expandvars(root_dir)
     root_dir = os.path.abspath(os.path.expanduser(root_dir))
     for root, _, files in os.walk(root_dir, topdown=False):
-        if filename in files:
-            pth = os.path.join(root, dict_file)
-            pth = os.path.abspath(pth)
-            yield pth
+        for f in files:
+            if filename == f:
+                pth = os.path.join(root, f)
+                pth = os.path.abspath(pth)
+                yield pth
+                break
 
 
 def connect(*args, **kwargs):
