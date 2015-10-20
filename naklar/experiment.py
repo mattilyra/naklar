@@ -64,31 +64,36 @@ def _read_conf_dicts(itr):
         yield d
 
 
+def _load_conf(pth, load_func=None):
+    try:
+        if callable(load_func):
+            d = load_func(pth)
+        else:
+            with open(pth, 'rb') as fh:
+                d = pickle.load(fh)
+    except EOFError:
+        print(pth)
+        raise
+    return d
+
 def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=['id'],
                autoload=True, decorators={}, restrict_keys=None, **kwargs):
     conf = {}
-    for root, _, files in os.walk(root_dir, topdown=False):
-        if dict_file in files:
-            pth = os.path.join(root, dict_file)
-            try:
-                if 'load_func' in kwargs:
-                    d = kwargs['load_func'](pth)
-                else:
-                    with open(pth, 'rb') as fh:
-                        d = pickle.load(fh)
-            except EOFError:
-                print(pth)
-                raise
-            keys = d.keys()
-            if restrict_keys is not None:
-                keys = d.keys() & restrict_keys
+    for pth in configs_from(root_dir, dict_file=dict_file):
+        d = _load_conf(pth, **kwargs)
+        keys = d.keys()
+        if restrict_keys is not None:
+            keys = keys & restrict_keys
 
-            for k in keys:
-                v = d[k]
-                if k in conf and (conf[k] is None and v is not None):
-                    conf[k] = v
-                elif k not in conf:
-                    conf[k] = v
+        # from each configuration file update all keys into conf overwriting
+        # None values from previously loaded confs
+        # TODO: conf[k] should be a list to support enumerating all values found - consider cases where alpha \in {'auto', 'symmetric', .1, .01}
+        for k in keys:
+            v = d[k]
+            if k in conf and (conf[k] is None and v is not None):
+                conf[k] = v
+            elif k not in conf:
+                conf[k] = v
 
     # create the table properties dictionary that will be fed to python types
     # module when creating the experiment class
@@ -163,6 +168,13 @@ def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=['id'],
         populate_from_disk(root_dir, dict_file, **kwargs)
 
     return Exp
+
+
+def configs_from(root_dir, dict_file='conf.pkl'):
+    for root, _, files in os.walk(root_dir, topdown=False):
+        if dict_file in files:
+            pth = os.path.join(root, dict_file)
+            yield pth
 
 
 def connect(*args, **kwargs):
