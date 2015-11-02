@@ -174,8 +174,7 @@ def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=None,
         for k in primary_keys:
             attrname = '_{}'.format(k)
             if attrname not in _TABLE_PROPERTIES_:
-                column = Column(k, Integer, primary_key=True,
-                                auto_increment=True)
+                column = Column(k, Integer, primary_key=True)
                 _TABLE_PROPERTIES_[attrname] = column
                 conf[k] = None
 
