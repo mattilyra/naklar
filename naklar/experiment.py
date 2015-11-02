@@ -131,7 +131,7 @@ def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=None,
                            ''.format(root_dir))
 
     if primary_keys is None:
-        primary_keys = ['id']
+        primary_keys = []
 
     conf = {}
     files = find_files(root_dir, filename=dict_file)
@@ -163,6 +163,7 @@ def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=None,
                 if hasattr(v, 'split'):
                     column_type = String(len(v) * 2)
                 break
+
         column = Column(k, column_type, primary_key=k in primary_keys)
         attrname = '_{}'.format(k)
         _TABLE_PROPERTIES_[attrname] = column
