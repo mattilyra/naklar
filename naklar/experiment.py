@@ -250,7 +250,7 @@ def connect(*args, **kwargs):
         _engine = create_engine(*args, **kwargs)
 
 
-def initialise(experiment_table, *args, **kwargs):
+def initialise(root_dir=None, experiment_table=None, *args, **kwargs):
     """Initialises a database connection to access the experiments Table.
 
     If no connection arguments are defined an in memory SQLite database is
@@ -333,24 +333,29 @@ def initialise(experiment_table, *args, **kwargs):
     if _engine is None:
         connect(*args, **kwargs)
 
+    if experiment_table is None and root_dir is None:
+        raise RuntimeError('Either experiment_table or root_dir must be set.')
+
     global E
-    if hasattr(experiment_table, 'split'):
-        # connect to a data base that does contain the experiments table
-        # and infer the Experiment class via reflection
-        if os.path.exists(experiment_table):
-            E = _from_dict(experiment_table, *args, **kwargs)
+    if root_dir is not None:
+        if os.path.exists(root_dir):
+            E = _from_dict(root_dir, *args, **kwargs)
         else:
+            raise ValueError('Directory {} does not exist.'.format(root_dir))
+    elif experiment_table is not None:
+        if isinstance(experiment_table, six.string_types):
+            # connect to a data base that contains the experiments table
+            # and infer the Experiment class via reflection
             E = _from_existing_db(experiment_table)
-    elif ExperimentBase in experiment_table.__bases__:
-        # connect to a database and create a new table
-        experiment_table.metadata.create_all(_engine)
-        ExperimentBase.prepare(_engine)
-        E = experiment_table
-    else:
-        raise ValueError('Experiment class must extend '
-                         'naklar.experiment.ExperimentBase, be a refence to a '
-                         'pickled Python dictionary or be the name of '
-                         'an existing table.')
+        elif _ExperimentBase in experiment_table.__bases__:
+            # connect to a database and create a new table
+            experiment_table.metadata.create_all(_engine)
+            _ExperimentBase.prepare(_engine)
+            E = experiment_table
+        else:
+            raise ValueError('Experiment class must extend '
+                             'naklar.experiment.ExperimentBase or be the name '
+                             'of an existing table.')
 
     E.__iter__ = _E_iterator
     E.__getitem__ = _E_getitem
