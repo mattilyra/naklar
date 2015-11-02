@@ -190,8 +190,8 @@ def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=None,
             funcs = decorators[k]
             if len(funcs) == 2:
                 g, s = funcs
-                g = bind_get(k, g)
-                s = bind_set(k, s)
+                g = _bind_get(k, g)
+                s = _bind_set(k, s)
                 # d = _decorate_function(g, code_get, d, k)
                 # d = _decorate_function(s, code_set, d, k)
                 # print(d)
@@ -206,9 +206,10 @@ def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=None,
         else:
             # execute the get and set methods in d's context
             # exec(code_get.format(k, None), {}, d)
-            exec(code_set.format(k, None), {}, d)
-            g = bind_get(k)
-            prop = hybrid_property(g, d['_set_{}'.format(k)])
+            # exec(code_set.format(k, None), {}, d)
+            g = _bind_get(k)
+            s = _bind_set(k)
+            prop = hybrid_property(g, s, None, None)
         setattr(Exp, k, prop)
 
     Exp.metadata.create_all(_engine)
