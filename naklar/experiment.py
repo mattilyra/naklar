@@ -96,11 +96,15 @@ def _load_conf(pth, load_func=None):
         raise
     return d
 
-def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=['id'],
+def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=None,
                autoload=True, decorators={}, restrict_keys=None, **kwargs):
     if not os.path.exists(root_dir):
         raise RuntimeError('Root directory {} does not exist.'
                            ''.format(root_dir))
+
+    if primary_keys is None:
+        primary_keys = ['id']
+
     conf = {}
     files = find_files(root_dir, filename=dict_file)
     for num_dicts, pth in enumerate(files):
@@ -142,8 +146,10 @@ def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=['id'],
         for k in primary_keys:
             attrname = '_{}'.format(k)
             if attrname not in _TABLE_PROPERTIES_:
-                column = Column(k, Integer, primary_key=True)
+                column = Column(k, Integer, primary_key=True,
+                                auto_increment=True)
                 _TABLE_PROPERTIES_[attrname] = column
+                conf[k] = None
 
     code_get = ('def _get_{0}(self):\n\t'
                     '_{0} = self._{0}\n\t'
@@ -428,3 +434,25 @@ def reset():
     connect()
     global _ExperimentBase
     _ExperimentBase = declarative_base(cls=DeferredReflection)
+
+
+def show_params(experiments=None, as_pandas=False):
+    """Show all keys and their values for experiments.
+
+    Returns
+    --------
+        A list of dictionaries or a Pandas `DataFrame` if `as_pandas=True`.
+    """
+    if experiments is None:
+        experiments = select()
+
+    rows = []
+    for exp in experiments:
+        rows.append({k: v for k, v in exp})
+
+    if as_pandas:
+        import pandas as pd
+        df = pd.DataFrame(rows)
+        return df
+
+    return rows
