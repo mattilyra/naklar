@@ -311,18 +311,18 @@ def initialise(experiment_table, *args, **kwargs):
                          'an existing table.')
 
 
-def populate_from_disk(root_directory, dict_file='conf.pkl', load_func=None):
+def populate_from_disk(root_dir, dict_file='conf.pkl', load_func=None):
     session = Session(bind=_engine)
-    if not os.path.exists(root_directory):
+    if not os.path.exists(root_dir):
         raise RuntimeError('Root directory {} does not exist.'
-                           ''.format(root_directory))
+                           ''.format(root_dir))
     dicts = find_files(root_dir, filename=dict_file)
     for found_dicts, pth in enumerate(dicts):
         if load_func is None:
-            with open(os.path.join(root, dict_file), 'rb') as fh:
+            with open(pth, 'rb') as fh:
                 conf = pickle.load(fh)
         else:
-            conf = load_func(os.path.join(root, dict_file))
+            conf = load_func(pth)
         exp = E()
         for k, v in six.iteritems(conf):
             if isinstance(v, collections.Container):
@@ -331,7 +331,7 @@ def populate_from_disk(root_directory, dict_file='conf.pkl', load_func=None):
         session.add(exp)
     if found_dicts == 0:
         raise Warning('Did not find files matching {} from {}'
-                      ''.format(dict_file, root_directory))
+                      ''.format(dict_file, root_dir))
     session.commit()
     session.close()
 
