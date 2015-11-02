@@ -32,6 +32,19 @@ _TABLE_PROPERTIES_ = {'__tablename__': 'experiment',
                       '__mapper_args__': {'column_prefix': '_'},
                      }
 
+
+def _E_iterator(self):
+    for p in self.__mapper__.iterate_properties:
+        yield (p.expression.key, getattr(self, p.expression.key))
+
+
+def _E_getitem(self, attr):
+    if hasattr(self, attr):
+        return getattr(self, attr)
+    else:
+        raise AttributeError('{} does not have attribute {}'.format(self, attr))
+
+
 def _from_existing_db(tablename):
     try:
         _ExperimentBase.__tablename__ = tablename
@@ -309,6 +322,9 @@ def initialise(experiment_table, *args, **kwargs):
                          'naklar.experiment.ExperimentBase, be a refence to a '
                          'pickled Python dictionary or be the name of '
                          'an existing table.')
+
+    E.__iter__ = _E_iterator
+    E.__getitem__ = _E_getitem
 
 
 def populate_from_disk(root_dir, dict_file='conf.pkl', load_func=None):
