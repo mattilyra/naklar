@@ -410,5 +410,5 @@ def select(*columns, **filters):
 
 def reset():
     connect()
-    global ExperimentBase
-    ExperimentBase = declarative_base(cls=DeferredReflection)
+    global _ExperimentBase
+    _ExperimentBase = declarative_base(cls=DeferredReflection)
