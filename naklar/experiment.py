@@ -29,10 +29,11 @@ _ExperimentBase = declarative_base(cls=DeferredReflection)
 # create the table properties dictionary that will be fed to python types
 # module when creating the experiment class - this is global so that users
 # can if they want to modify the table properties
-_TABLE_PROPERTIES_ = {'__tablename__': 'experiment',
-                      '__mapper_args__': {'column_prefix': '_'},
-                     }
+_TABLE_PROP_TEMPLATE_ = {'__tablename__': 'experiment',
+                         '__mapper_args__': {'column_prefix': '_'},
+                        }
 
+TABLE_PROPERTIES_ = {}
 
 def _E_iterator(self):
     for p in self.__mapper__.iterate_properties:
@@ -131,7 +132,7 @@ def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=None,
                            ''.format(root_dir))
 
     if primary_keys is None:
-        primary_keys = []
+        primary_keys = ['id']
 
     conf = {}
     files = find_files(root_dir, filename=dict_file)
@@ -156,6 +157,8 @@ def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=None,
                 'definition can not be created.'.format(dict_file, root_dir))
         raise RuntimeError(msg)
 
+    global TABLE_PROPERTIES_
+    TABLE_PROPERTIES_ = {k:v for k, v in six.viewitems(_TABLE_PROP_TEMPLATE_)}
     sql_types = [DateTime, Float, Integer, Boolean, String]
     for k, v in six.iteritems(conf):
         for column_type in sql_types:
@@ -166,22 +169,22 @@ def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=None,
 
         column = Column(k, column_type, primary_key=k in primary_keys)
         attrname = '_{}'.format(k)
-        _TABLE_PROPERTIES_[attrname] = column
+        TABLE_PROPERTIES_[attrname] = column
 
     # if the conf dictionary does not contain all of the primary key columns
     # add the ones that are missing - this ensures that if no primary_keys
     # are defined at least a default id integer column is created
-    if not all(['_{}'.format(k) in _TABLE_PROPERTIES_ for k in primary_keys]):
+    if not all(['_{}'.format(k) in TABLE_PROPERTIES_ for k in primary_keys]):
         for k in primary_keys:
             attrname = '_{}'.format(k)
-            if attrname not in _TABLE_PROPERTIES_:
+            if attrname not in TABLE_PROPERTIES_:
                 column = Column(k, Integer, primary_key=True)
-                _TABLE_PROPERTIES_[attrname] = column
+                TABLE_PROPERTIES_[attrname] = column
                 conf[k] = None
 
     # create a runtime class Exp that is going to be the experiment table
     # definition for sqlalchemy
-    Exp = type('Exp', (_ExperimentBase,), _TABLE_PROPERTIES_)
+    Exp = type('Exp', (_ExperimentBase,), TABLE_PROPERTIES_)
 
     # create getter and setter for each key loaded from disk
     # TODO: refactor all of this to use proper code instead of the abomination above
@@ -460,7 +463,9 @@ def select(*columns, **filters):
 
 
 def reset():
+    _engine.dispose()
     connect()
+    TABLE_PROPERTIES_ = {}
     global _ExperimentBase
     _ExperimentBase = declarative_base(cls=DeferredReflection)
 
