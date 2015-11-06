@@ -97,7 +97,7 @@ def _bind_get(prop_name, f=None):
     def _get(self):
         v = getattr(self, '_{}'.format(prop_name))
         if callable(f):
-            v = f(v)
+            v = f(self, v)
         return v
     _get.__name__ = '_get_{}'.format(prop_name)
     return _get
@@ -106,7 +106,7 @@ def _bind_get(prop_name, f=None):
 def _bind_set(prop_name, f=None):
     def _set(self, v):
         if callable(f):
-            v = f(v)
+            v = f(self, v)
         setattr(self, '_{}'.format(prop_name), v)
     _set.__name__ = '_set_{}'.format(prop_name)
     return _set
@@ -182,40 +182,18 @@ def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=None,
                 TABLE_PROPERTIES_[attrname] = column
                 conf[k] = None
 
+    # create getter and setter methods for each key loaded from disk
+    # NOTE these are explicitly for the conf keys only
+    keys_ = conf.keys() - decorators.keys()
+    decorators_ = add_decorators({k: None for k in keys_})
+    decorators_ = add_decorators(decorators, decorators=decorators_,
+                                 TABLE_DEF=TABLE_PROPERTIES_)
+
     # create a runtime class Exp that is going to be the experiment table
     # definition for sqlalchemy
     Exp = type('Exp', (_ExperimentBase,), TABLE_PROPERTIES_)
-
-    # create getter and setter for each key loaded from disk
-    # TODO: refactor all of this to use proper code instead of the abomination above
-    for k in conf:
-        d = {}
-        if k in decorators:
-            funcs = decorators[k]
-            if len(funcs) == 2:
-                g, s = funcs
-                g = _bind_get(k, g)
-                s = _bind_set(k, s)
-                # d = _decorate_function(g, code_get, d, k)
-                # d = _decorate_function(s, code_set, d, k)
-                # print(d)
-                # exec(code_set.format(k, None), {}, d)
-                prop = hybrid_property(g, s, None, None)
-
-            else:
-                raise ValueError('There should be exactly 2 decorator methods '
-                                 'provided for key \'{}\', found {}. The '
-                                 'method tuple should contain (getter, '
-                                 'setter).'.format(k, len(funcs)))
-        else:
-            # execute the get and set methods in d's context
-            # exec(code_get.format(k, None), {}, d)
-            # exec(code_set.format(k, None), {}, d)
-            g = _bind_get(k)
-            s = _bind_set(k)
-            prop = hybrid_property(g, s, None, None)
+    for k, prop in decorators_:
         setattr(Exp, k, prop)
-
     Exp.metadata.create_all(_engine)
     Exp.prepare(_engine)
 
@@ -226,6 +204,41 @@ def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=None,
 
     return Exp
 
+
+def add_decorators(functions, decorators=None, TABLE_DEF=None):
+    if not decorators:
+        decorators = []
+
+    for k in functions:
+        funcs = functions[k]
+        if not funcs:
+            g = _bind_get(k) # no-op default getter
+            s = _bind_set(k) # no-op default setter
+            prop = hybrid_property(g, s, None, None)
+        elif len(funcs) == 1:
+            g, = funcs
+            g = _bind_get(k, g)
+            s = _bind_set(k) # no-op default setter
+            prop = hybrid_property(g, s, None, None)
+        elif len(funcs) == 2:
+            g, s = funcs
+            g = _bind_get(k, g)
+            s = _bind_set(k, s)
+            prop = hybrid_property(g, s, None, None)
+        elif len(funcs) == 3:
+            g, s, column = funcs
+            g = _bind_get(k, g)
+            s = _bind_set(k, s)
+            prop = hybrid_property(g, s, None, None)
+
+            TABLE_DEF['_'.format(k)] = column
+        else:
+            raise ValueError('There should be exactly 2 decorator methods '
+                             'provided for key \'{}\', found {}. The '
+                             'method tuple should contain (getter, '
+                             'setter).'.format(k, len(funcs)))
+        decorators.append((k, prop))
+    return decorators
 
 def find_files(root_dir, filename='conf.pkl'):
     """A generator over files called `filename` in any subdirectory of root.
@@ -254,7 +267,8 @@ def connect(*args, **kwargs):
         _engine = create_engine(*args, **kwargs)
 
 
-def initialise(root_dir=None, experiment_table=None, *args, **kwargs):
+def initialise(files=None, root_dir=None, experiment_table=None,
+               *args, **kwargs):
     """Initialises a database connection to access the experiments Table.
 
     If no connection arguments are defined an in memory SQLite database is
@@ -377,6 +391,9 @@ def populate_from_disk(root_dir, dict_file='conf.pkl', load_func=None):
                 conf = pickle.load(fh)
         else:
             conf = load_func(pth)
+
+        # in order for the set decorators to work correctly the values of
+        # of the experiment object have to be set explicitly
         exp = E()
         for k, v in six.iteritems(conf):
             if isinstance(v, collections.Container):
