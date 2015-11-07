@@ -145,7 +145,7 @@ def _conf_from_files(files):
 
     return conf
 
-def _create_table_definition(table_properties, primary_keys=None):
+def _create_table_definition(table_properties, conf, primary_keys=None):
     # global TABLE_PROPERTIES_
     # TABLE_PROPERTIES_ = {k:v for k, v in six.viewitems(_TABLE_PROP_TEMPLATE_)}
     if primary_keys is None:
@@ -222,6 +222,9 @@ def add_decorators(functions, decorators=None, TABLE_DEF=None):
 def find_files(root_dir, filename='conf.pkl'):
     """A generator over files called `filename` in any subdirectory of root.
     """
+    if not os.path.exists(root_dir):
+        raise ValueError('Directory {} does not exist.'.format(root_dir))
+
     root_dir = os.path.expandvars(root_dir)
     root_dir = os.path.abspath(os.path.expanduser(root_dir))
     for root, _, files in os.walk(root_dir, topdown=False):
@@ -247,7 +250,7 @@ def connect(*args, **kwargs):
 
 
 def initialise(files=None, root_dir=None, table_name=None,
-               dict_file='conf.pickle', decorators=None,
+               dict_file='conf.pickle', decorators=None, autoload=True,
                *args, **kwargs):
     """Initialises a database connection to access the experiments Table.
 
@@ -331,51 +334,44 @@ def initialise(files=None, root_dir=None, table_name=None,
     if _engine is None:
         connect(*args, **kwargs)
 
-    if experiment_table is None and root_dir is None:
-        raise RuntimeError('Either experiment_table or root_dir must be set.')
+    if files is None and root_dir is None:
+        raise RuntimeError('Either files or root_dir must be set.')
 
     global E
 
     # CREATE A NEW DATABASE TABLE
-    if experiment_table is None:
-        if files is not None:
-            conf = _conf_from_files(files)
-        elif root_dir is not None:
-            if os.path.exists(root_dir):
-                files = find_files(root_dir, filename=dict_file)
-                conf = _conf_from_files(files)
-            else:
-                raise ValueError('Directory {} does not exist.'.format(root_dir))
-        else:
-            raise RuntimeError('Must set either files, root_dir or experiment_table')
+    if files is None:
+        files = find_files(root_dir, filename=dict_file)
 
-        table = {}
-        if table_name is not None:
-            table = {'__tablename__': table_name}
+    conf = _conf_from_files(files)
+    table = {}
+    if table_name is not None:
+        table = {'__tablename__': table_name}
 
-        table_properties = _create_table_definition(table, **kwargs)
+    table_properties = _create_table_definition(table, conf, **kwargs)
 
-        # create getter and setter methods for each key loaded from disk
-        # NOTE these are explicitly for the conf keys only
-        keys_ = conf.keys() - decorators.keys()
-        decorators_ = add_decorators({k: None for k in keys_})
-        decorators_ = add_decorators(decorators, decorators=decorators_,
-                                     TABLE_DEF=table_properties)
+    # create getter and setter methods for each key loaded from disk
+    # NOTE these are explicitly for the conf keys only
+    keys_ = conf.keys() - decorators.keys()
+    decorators_ = add_decorators({k: None for k in keys_})
+    decorators_ = add_decorators(decorators, decorators=decorators_,
+                                 TABLE_DEF=table_properties)
 
-        # create a runtime class Exp that is going to be the experiment table
-        # definition for sqlalchemy
-        Exp = type('Exp', (_ExperimentBase,), table_properties)
-        for k, prop in decorators_:
-            setattr(Exp, k, prop)
-        Exp.metadata.create_all(_engine)
-        Exp.prepare(_engine)
+    # create a runtime class Exp that is going to be the experiment table
+    # definition for sqlalchemy
+    Exp = type('Exp', (_ExperimentBase,), table_properties)
+    for k, prop in decorators_:
+        setattr(Exp, k, prop)
+    Exp.metadata.create_all(_engine)
+    Exp.prepare(_engine)
 
-        if autoload:
-            E = Exp
-            populate_from_disk(files, **kwargs)
+    if autoload:
+        E = Exp
+        populate_from_disk(files, **kwargs)
 
     # REFLECT EXISTING DATABASE
     elif table_name is not None:
+        raise NotImplementedError('Reflecting existing DB not supported yet.')
         if isinstance(table_name, six.string_types):
             # connect to a data base that contains the experiments table
             # and infer the Experiment class via reflection
