@@ -249,7 +249,7 @@ def connect(*args, **kwargs):
 
 
 def initialise(files=None, root_dir=None, table_name=None,
-               dict_file='conf.pickle', decorators=None, autoload=True,
+               dict_file='conf.pkl', decorators=None, autoload=True,
                load_func=None, restrict_keys=None,
                *args, **kwargs):
     """Initialises a database connection to access the experiments Table.
