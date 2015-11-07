@@ -209,15 +209,14 @@ def add_decorators(functions, decorators=None, TABLE_DEF=None):
             g = _bind_get(k, g)
             s = _bind_set(k, s)
             prop = hybrid_property(g, s, None, None)
-
-            TABLE_DEF['_'.format(k)] = column
+            TABLE_DEF['_{}'.format(k)] = column
         else:
             raise ValueError('There should be exactly 2 decorator methods '
                              'provided for key \'{}\', found {}. The '
                              'method tuple should contain (getter, '
                              'setter).'.format(k, len(funcs)))
         decorators.append((k, prop))
-    return decorators
+    return decorators, TABLE_DEF
 
 def find_files(root_dir, filename='conf.pkl'):
     """A generator over files called `filename` in any subdirectory of root.
@@ -355,10 +354,11 @@ def initialise(files=None, root_dir=None, table_name=None,
     # create getter and setter methods for each key loaded from disk
     # NOTE these are explicitly for the conf keys only
     keys_ = conf.keys() - decorators.keys()
-    decorators_ = add_decorators({k: None for k in keys_})
-    decorators_ = add_decorators(decorators, decorators=decorators_,
-                                 TABLE_DEF=table_properties)
-
+    decorators_, _ = add_decorators({k: None for k in keys_})
+    decorators_, table_properties = add_decorators(decorators,
+                                                   decorators=decorators_,
+                                                   TABLE_DEF=table_properties)
+    print(table_properties)
     # create a runtime class Exp that is going to be the experiment table
     # definition for sqlalchemy
     Exp = type('Exp', (_ExperimentBase,), table_properties)
