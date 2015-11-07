@@ -489,7 +489,12 @@ def select(*columns, **filters):
 
 
 def reset():
-    _engine.dispose()
+    try:
+        _engine.dispose()
+        E.metadata.clear()
+    except AttributeError:
+        pass
+
     connect()
     TABLE_PROPERTIES_ = {}
     global _ExperimentBase
