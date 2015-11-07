@@ -4,7 +4,7 @@ import os
 import re
 
 
-def translate_path(path, ptrn, replace):
+def translate_path(self, path, ptrn, replace):
     """Replace a directory path on file system with that of another.
 
     Given an existing directory `path` on one filesystem replace the path to

@@ -1,3 +1,4 @@
+import sys
 import os
 from os import path
 import re
@@ -25,12 +26,8 @@ import six
 _engine = None
 _ExperimentBase = declarative_base(cls=DeferredReflection)
 
-# create the table properties dictionary that will be fed to python types
-# module when creating the experiment class - this is global so that users
-# can if they want to modify the table properties
-_TABLE_PROP_TEMPLATE_ = {'__tablename__': 'experiment',
-                         '__mapper_args__': {'column_prefix': '_'},
-                        }
+DEFAULT_TABLENAME = 'experiment'
+DEFAULT_COLUMN_PREFIX = '_'
 
 TABLE_PROPERTIES_ = {}
 
@@ -57,20 +54,6 @@ def _from_existing_db(tablename):
     return _ExperimentBase
 
 
-def _decorate_function(f, f_code, d, key):
-    if callable(f):
-        if isinstance(f, functools.partial):
-            fname = f.func.__name__
-        else:
-            fname = f.__name__
-        exec(f_code.format(key, fname) in d)
-        d[fname] = f
-    else:
-        exec(f_code.format(key, None) in d)
-
-    return d
-
-
 def _find_conf_files(root_dir, dict_filename='conf.pkl'):
     for root, _, files in os.walk(root_dir, topdown=False):
         if dict_filename in files:
@@ -85,6 +68,25 @@ def _read_conf_dicts(itr):
         yield d
 
 
+def _bind_get(prop_name, f=None):
+    def _get(self):
+        v = getattr(self, '_{}'.format(prop_name))
+        if callable(f):
+            v = f(self, v)
+        return v
+    _get.__name__ = '_get_{}'.format(prop_name)
+    return _get
+
+
+def _bind_set(prop_name, f=None):
+    def _set(self, v):
+        if callable(f):
+            v = f(self, v)
+        setattr(self, '_{}'.format(prop_name), v)
+    _set.__name__ = '_set_{}'.format(prop_name)
+    return _set
+
+
 def _load_conf(pth, load_func=None):
     try:
         if callable(load_func):
@@ -97,17 +99,9 @@ def _load_conf(pth, load_func=None):
         raise
     return d
 
-def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=None,
-               autoload=True, decorators={}, restrict_keys=None, **kwargs):
-    if not os.path.exists(root_dir):
-        raise RuntimeError('Root directory {} does not exist.'
-                           ''.format(root_dir))
 
-    if primary_keys is None:
-        primary_keys = ['id']
-
+def _conf_from_files(files, restrict_keys=None, **kwargs):
     conf = {}
-    files = find_files(root_dir, filename=dict_file)
     for num_dicts, pth in enumerate(files):
         d = _load_conf(pth, **kwargs)
         keys = d.keys()
@@ -129,8 +123,21 @@ def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=None,
                 'definition can not be created.'.format(dict_file, root_dir))
         raise RuntimeError(msg)
 
-    global TABLE_PROPERTIES_
-    TABLE_PROPERTIES_ = {k:v for k, v six.viewitems(_TABLE_PROP_TEMPLATE_)}
+    return conf
+
+def _create_table_definition(table_properties, conf, primary_keys=None):
+    # global TABLE_PROPERTIES_
+    # TABLE_PROPERTIES_ = {k:v for k, v in six.viewitems(_TABLE_PROP_TEMPLATE_)}
+    if primary_keys is None:
+        primary_keys = ['id']
+
+    if '__tablename__' not in table_properties:
+        table_properties['__tablename__'] = DEFAULT_TABLENAME
+
+    if '__mapper_args__' not in table_properties:
+        table_properties['__mapper_args__'] =\
+            {'column_prefix': DEFAULT_COLUMN_PREFIX}
+
     sql_types = [DateTime, Float, Integer, Boolean, String]
     for k, v in six.iteritems(conf):
         for column_type in sql_types:
@@ -138,73 +145,65 @@ def _from_dict(root_dir, dict_file='conf.pkl', primary_keys=None,
                 if hasattr(v, 'split'):
                     column_type = String(len(v) * 2)
                 break
+
         column = Column(k, column_type, primary_key=k in primary_keys)
         attrname = '_{}'.format(k)
-        TABLE_PROPERTIES_[attrname] = column
+        table_properties[attrname] = column
 
     # if the conf dictionary does not contain all of the primary key columns
     # add the ones that are missing - this ensures that if no primary_keys
     # are defined at least a default id integer column is created
-    if not all(['_{}'.format(k) in TABLE_PROPERTIES_ for k in primary_keys]):
+    if not all(['_{}'.format(k) in table_properties for k in primary_keys]):
         for k in primary_keys:
             attrname = '_{}'.format(k)
-            if attrname not in TABLE_PROPERTIES_:
+            if attrname not in table_properties:
                 column = Column(k, Integer, primary_key=True)
-                TABLE_PROPERTIES_[attrname] = column
+                table_properties[attrname] = column
                 conf[k] = None
 
-    code_get = ('def _get_{0}(self):\n\t'
-                    '_{0} = self._{0}\n\t'
-                    'if callable({1}):\n\t\t'
-                        '_{0} = {1}(_{0})\n\t'
-                    'return _{0}')
+    return table_properties
 
-    code_set = ('def _set_{0}(self, v):\n\t'
-                'if callable({1}):\n\t\t'
-                    'v = {1}(v)\n\t'
-                'self._{0} = v')
 
-    # create a runtime class Exp that is going to be the experiment table
-    # definition for sqlalchemy
-    Exp = type('Exp', (_ExperimentBase,), TABLE_PROPERTIES_)
+def add_decorators(functions, decorators=None, TABLE_DEF=None):
+    if not decorators:
+        decorators = []
 
-    # create getter and setter for each key loaded from disk
-    # TODO: refactor all of this to use proper code instead of the abomination above
-    for k in conf:
-        d = {}
-        if k in decorators:
-            funcs = decorators[k]
-            if len(funcs) == 2:
-                g, s = funcs
-                d = _decorate_function(g, code_get, d, k)
-                d = _decorate_function(s, code_set, d, k)
-            else:
-                raise ValueError('There should be exactly 2 decorator methods '
-                                 'provided for key \'{}\', found {}. The '
-                                 'method tuple should contain (getter, '
-                                 'setter).'.format(k, len(funcs)))
+    for k in functions:
+        funcs = functions[k]
+        if not funcs:
+            g = _bind_get(k) # no-op default getter
+            s = _bind_set(k) # no-op default setter
+            prop = hybrid_property(g, s, None, None)
+        elif len(funcs) == 1:
+            g, = funcs
+            g = _bind_get(k, g)
+            s = _bind_set(k) # no-op default setter
+            prop = hybrid_property(g, s, None, None)
+        elif len(funcs) == 2:
+            g, s = funcs
+            g = _bind_get(k, g)
+            s = _bind_set(k, s)
+            prop = hybrid_property(g, s, None, None)
+        elif len(funcs) == 3:
+            g, s, column = funcs
+            g = _bind_get(k, g)
+            s = _bind_set(k, s)
+            prop = hybrid_property(g, s, None, None)
+            TABLE_DEF['_{}'.format(k)] = column
         else:
-            # execute the get and set methods in d's context
-            exec(code_get.format(k, None), {}, d)
-            exec(code_set.format(k, None), {}, d)
-
-        setattr(Exp, k, hybrid_property(d['_get_{}'.format(k)],
-                                        d['_set_{}'.format(k)]))
-
-    Exp.metadata.create_all(_engine)
-    Exp.prepare(_engine)
-
-    if autoload:
-        global E
-        E = Exp
-        populate_from_disk(root_dir, dict_file, **kwargs)
-
-    return Exp
-
+            raise ValueError('There should be exactly 2 decorator methods '
+                             'provided for key \'{}\', found {}. The '
+                             'method tuple should contain (getter, '
+                             'setter).'.format(k, len(funcs)))
+        decorators.append((k, prop))
+    return decorators, TABLE_DEF
 
 def find_files(root_dir, filename='conf.pkl'):
     """A generator over files called `filename` in any subdirectory of root.
     """
+    if not os.path.exists(root_dir):
+        raise ValueError('Directory {} does not exist.'.format(root_dir))
+
     root_dir = os.path.expandvars(root_dir)
     root_dir = os.path.abspath(os.path.expanduser(root_dir))
     for root, _, files in os.walk(root_dir, topdown=False):
@@ -229,7 +228,10 @@ def connect(*args, **kwargs):
         _engine = create_engine(*args, **kwargs)
 
 
-def initialise(experiment_table, *args, **kwargs):
+def initialise(files=None, root_dir=None, table_name=None,
+               dict_file='conf.pkl', decorators=None, autoload=True,
+               load_func=None, restrict_keys=None,
+               *args, **kwargs):
     """Initialises a database connection to access the experiments Table.
 
     If no connection arguments are defined an in memory SQLite database is
@@ -312,50 +314,91 @@ def initialise(experiment_table, *args, **kwargs):
     if _engine is None:
         connect(*args, **kwargs)
 
+    if files is None and root_dir is None:
+        raise RuntimeError('Either files or root_dir must be set.')
+
     global E
-    if hasattr(experiment_table, 'split'):
-        # connect to a data base that does contain the experiments table
-        # and infer the Experiment class via reflection
-        if os.path.exists(experiment_table):
-            E = _from_dict(experiment_table, *args, **kwargs)
+
+    # CREATE A NEW DATABASE TABLE
+    if files is None:
+        files = find_files(root_dir, filename=dict_file)
+
+    conf = _conf_from_files(files, load_func=load_func,
+                            restrict_keys=restrict_keys)
+    table = {}
+    if table_name is not None:
+        table = {'__tablename__': table_name}
+
+    table_properties = _create_table_definition(table, conf, **kwargs)
+
+    # create getter and setter methods for each key loaded from disk
+    # NOTE these are explicitly for the conf keys only
+    keys_ = conf.keys() - decorators.keys()
+    decorators_, _ = add_decorators({k: None for k in keys_})
+    decorators_, table_properties = add_decorators(decorators,
+                                                   decorators=decorators_,
+                                                   TABLE_DEF=table_properties)
+
+    # create a runtime class Exp that is going to be the experiment table
+    # definition for sqlalchemy
+    Exp = type('Exp', (_ExperimentBase,), table_properties)
+    for k, prop in decorators_:
+        setattr(Exp, k, prop)
+    Exp.metadata.create_all(_engine)
+    Exp.prepare(_engine)
+
+    if autoload:
+        E = Exp
+        populate_from_disk(files, extra_params=decorators.keys() - conf.keys(),
+                           **kwargs)
+
+    # REFLECT EXISTING DATABASE
+    elif table_name is not None:
+        raise NotImplementedError('Reflecting existing DB not supported yet.')
+        if isinstance(table_name, six.string_types):
+            # connect to a data base that contains the experiments table
+            # and infer the Experiment class via reflection
+            E = _from_existing_db(table_name)
+        elif _ExperimentBase in table_name.__bases__:
+            # connect to a database and create a new table
+            experiment_table.metadata.create_all(_engine)
+            _ExperimentBase.prepare(_engine)
+            E = experiment_table
         else:
-            E = _from_existing_db(experiment_table)
-    elif ExperimentBase in experiment_table.__bases__:
-        # connect to a database and create a new table
-        experiment_table.metadata.create_all(_engine)
-        ExperimentBase.prepare(_engine)
-        E = experiment_table
-    else:
-        raise ValueError('Experiment class must extend '
-                         'naklar.experiment.ExperimentBase, be a refence to a '
-                         'pickled Python dictionary or be the name of '
-                         'an existing table.')
+            raise ValueError('Experiment class must extend '
+                             'naklar.experiment.ExperimentBase or be the name '
+                             'of an existing table.')
 
     E.__iter__ = _E_iterator
     E.__getitem__ = _E_getitem
 
 
-def populate_from_disk(root_dir, dict_file='conf.pkl', load_func=None):
+def populate_from_disk(files, load_func=None, extra_params=None):
+    if extra_params is None:
+        extra_params = []
+
+    if not files:
+        raise ValueError('An empty file list was provided')
+
     session = Session(bind=_engine)
-    if not os.path.exists(root_dir):
-        raise RuntimeError('Root directory {} does not exist.'
-                           ''.format(root_dir))
-    dicts = find_files(root_dir, filename=dict_file)
-    for found_dicts, pth in enumerate(dicts):
+    for pth in files:
         if load_func is None:
             with open(pth, 'rb') as fh:
                 conf = pickle.load(fh)
         else:
             conf = load_func(pth)
+
+        # in order for the set decorators to work correctly the values of
+        # of the experiment object have to be set explicitly
         exp = E()
         for k, v in six.iteritems(conf):
             if isinstance(v, collections.Container):
                 v = str(v)
             setattr(exp, k, v)
+
+        for k in extra_params:
+            setattr(exp, k, None)
         session.add(exp)
-    if found_dicts == 0:
-        raise Warning('Did not find files matching {} from {}'
-                      ''.format(dict_file, root_dir))
     session.commit()
     session.close()
 
@@ -433,7 +476,12 @@ def select(*columns, **filters):
 
 
 def reset():
-    _engine.dispose()
+    try:
+        _engine.dispose()
+        E.metadata.clear()
+    except AttributeError:
+        pass
+
     connect()
     TABLE_PROPERTIES_ = {}
     global _ExperimentBase
