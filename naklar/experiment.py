@@ -369,7 +369,7 @@ def initialise(files=None, root_dir=None, table_name=None,
 
     if autoload:
         E = Exp
-        populate_from_disk(files, **kwargs)
+        populate_from_disk(files, extra_params=decorators.keys(), **kwargs)
 
     # REFLECT EXISTING DATABASE
     elif table_name is not None:
@@ -392,7 +392,9 @@ def initialise(files=None, root_dir=None, table_name=None,
     E.__getitem__ = _E_getitem
 
 
-def populate_from_disk(files, load_func=None):
+def populate_from_disk(files, load_func=None, extra_params=None):
+    if extra_params is None:
+        extra_params = []
     session = Session(bind=_engine)
     for found_dicts, pth in enumerate(files):
         if load_func is None:
@@ -408,6 +410,9 @@ def populate_from_disk(files, load_func=None):
             if isinstance(v, collections.Container):
                 v = str(v)
             setattr(exp, k, v)
+
+        for k in extra_params:
+            setattr(exp, k, None)
         session.add(exp)
     if found_dicts == 0:
         raise Warning('Did not find files matching {} from {}'
