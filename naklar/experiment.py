@@ -120,7 +120,7 @@ def _load_conf(pth, load_func=None):
     return d
 
 
-def _conf_from_files(files, **kwargs):
+def _conf_from_files(files, restrict_keys=None, **kwargs):
     conf = {}
     for num_dicts, pth in enumerate(files):
         d = _load_conf(pth, **kwargs)
@@ -251,7 +251,7 @@ def connect(*args, **kwargs):
 
 def initialise(files=None, root_dir=None, table_name=None,
                dict_file='conf.pickle', decorators=None, autoload=True,
-               load_func=None,
+               load_func=None, restrict_keys=None,
                *args, **kwargs):
     """Initialises a database connection to access the experiments Table.
 
@@ -344,7 +344,8 @@ def initialise(files=None, root_dir=None, table_name=None,
     if files is None:
         files = find_files(root_dir, filename=dict_file)
 
-    conf = _conf_from_files(files, load_func=load_func)
+    conf = _conf_from_files(files, load_func=load_func,
+                            restrict_keys=restrict_keys)
     table = {}
     if table_name is not None:
         table = {'__tablename__': table_name}
