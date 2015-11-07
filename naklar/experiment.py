@@ -358,7 +358,7 @@ def initialise(files=None, root_dir=None, table_name=None,
     decorators_, table_properties = add_decorators(decorators,
                                                    decorators=decorators_,
                                                    TABLE_DEF=table_properties)
-    
+
     # create a runtime class Exp that is going to be the experiment table
     # definition for sqlalchemy
     Exp = type('Exp', (_ExperimentBase,), table_properties)
@@ -369,7 +369,8 @@ def initialise(files=None, root_dir=None, table_name=None,
 
     if autoload:
         E = Exp
-        populate_from_disk(files, extra_params=decorators.keys(), **kwargs)
+        populate_from_disk(files, extra_params=decorators.keys() - conf.keys(),
+                           **kwargs)
 
     # REFLECT EXISTING DATABASE
     elif table_name is not None:
