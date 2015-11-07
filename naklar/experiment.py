@@ -53,27 +53,6 @@ def _from_existing_db(tablename):
     return _ExperimentBase
 
 
-def _decorate_function(f, f_code, d, key):
-    if callable(f):
-        if isinstance(f, functools.partial):
-            fname = f.func.__name__
-        else:
-            fname = f.__name__
-
-        # fname = '_{}'.format(fname)
-        # mod = sys.modules[globals()['__name__']]
-        # setattr(mod, fname, f)
-
-        exec(f_code.format(key, fname), {}, d)
-        print(fname in globals())
-        d[fname] = f
-        print(d)
-    else:
-        exec(f_code.format(key, None), {}, d)
-
-    return d
-
-
 def _find_conf_files(root_dir, dict_filename='conf.pkl'):
     for root, _, files in os.walk(root_dir, topdown=False):
         if dict_filename in files:
@@ -396,8 +375,12 @@ def initialise(files=None, root_dir=None, table_name=None,
 def populate_from_disk(files, load_func=None, extra_params=None):
     if extra_params is None:
         extra_params = []
+
+    if not files:
+        raise ValueError('An empty file list was provided')
+
     session = Session(bind=_engine)
-    for found_dicts, pth in enumerate(files):
+    for pth in files:
         if load_func is None:
             with open(pth, 'rb') as fh:
                 conf = pickle.load(fh)
@@ -415,9 +398,6 @@ def populate_from_disk(files, load_func=None, extra_params=None):
         for k in extra_params:
             setattr(exp, k, None)
         session.add(exp)
-    if found_dicts == 0:
-        raise Warning('Did not find files matching {} from {}'
-                      ''.format(dict_file, root_dir))
     session.commit()
     session.close()
 
