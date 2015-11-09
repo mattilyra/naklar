@@ -126,8 +126,6 @@ def _conf_from_files(files, restrict_keys=None, **kwargs):
     return conf
 
 def _create_table_definition(table_properties, conf, primary_keys=None):
-    # global TABLE_PROPERTIES_
-    # TABLE_PROPERTIES_ = {k:v for k, v in six.viewitems(_TABLE_PROP_TEMPLATE_)}
     if primary_keys is None:
         primary_keys = ['id']
 
@@ -320,6 +318,10 @@ def initialise(files=None, root_dir=None, table_name=None,
     # CREATE A NEW DATABASE TABLE
     if files is None:
         files = find_files(root_dir, filename=dict_file)
+        files = list(files)
+    else:
+        pass
+        # check that files can be iterated over multiple times
 
     if not files:
         raise ValueError('No files found')
