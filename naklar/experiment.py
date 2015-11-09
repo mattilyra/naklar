@@ -317,11 +317,12 @@ def initialise(files=None, root_dir=None, table_name=None,
     if files is None and root_dir is None:
         raise RuntimeError('Either files or root_dir must be set.')
 
-    global E
-
     # CREATE A NEW DATABASE TABLE
     if files is None:
         files = find_files(root_dir, filename=dict_file)
+
+    if not files:
+        raise ValueError('No files found')
 
     conf = _conf_from_files(files, load_func=load_func,
                             restrict_keys=restrict_keys)
@@ -348,32 +349,18 @@ def initialise(files=None, root_dir=None, table_name=None,
     Exp.prepare(_engine)
 
     if autoload:
-        E = Exp
-        populate_from_disk(files, extra_params=decorators.keys() - conf.keys(),
+        Exp
+        populate_from_disk(exp, files=files,
+                           extra_params=decorators.keys() - conf.keys(),
                            **kwargs)
 
-    # REFLECT EXISTING DATABASE
-    elif table_name is not None:
-        raise NotImplementedError('Reflecting existing DB not supported yet.')
-        if isinstance(table_name, six.string_types):
-            # connect to a data base that contains the experiments table
-            # and infer the Experiment class via reflection
-            E = _from_existing_db(table_name)
-        elif _ExperimentBase in table_name.__bases__:
-            # connect to a database and create a new table
-            experiment_table.metadata.create_all(_engine)
-            _ExperimentBase.prepare(_engine)
-            E = experiment_table
-        else:
-            raise ValueError('Experiment class must extend '
-                             'naklar.experiment.ExperimentBase or be the name '
-                             'of an existing table.')
-
+    global E
+    E = Exp
     E.__iter__ = _E_iterator
     E.__getitem__ = _E_getitem
 
 
-def populate_from_disk(files, load_func=None, extra_params=None):
+def populate_from_disk(cls, files, load_func=None, extra_params=None):
     if extra_params is None:
         extra_params = []
 
@@ -390,7 +377,7 @@ def populate_from_disk(files, load_func=None, extra_params=None):
 
         # in order for the set decorators to work correctly the values of
         # of the experiment object have to be set explicitly
-        exp = E()
+        exp = cls()
         for k, v in six.iteritems(conf):
             if isinstance(v, collections.Container):
                 v = str(v)
