@@ -351,8 +351,7 @@ def initialise(files=None, root_dir=None, table_name=None,
     Exp.prepare(_engine)
 
     if autoload:
-        Exp
-        populate_from_disk(exp, files=files,
+        populate_from_disk(Exp, files=files,
                            extra_params=decorators.keys() - conf.keys(),
                            **kwargs)
 
@@ -380,12 +379,17 @@ def populate_from_disk(cls, files, load_func=None, extra_params=None):
         # in order for the set decorators to work correctly the values of
         # of the experiment object have to be set explicitly
         exp = cls()
-        for k, v in six.iteritems(conf):
+        for k in conf:
+            if not hasattr(exp, k):
+                continue
+            v = conf[k]
             if isinstance(v, collections.Container):
                 v = str(v)
             setattr(exp, k, v)
 
         for k in extra_params:
+            if not hasattr(exp, k):
+                raise RuntimeError('Decorator {} missing from table definition'.format(k))
             setattr(exp, k, None)
         session.add(exp)
     session.commit()
