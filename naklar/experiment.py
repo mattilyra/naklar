@@ -396,6 +396,38 @@ def populate_from_disk(cls, files, load_func=None, extra_params=None):
     session.close()
 
 
+def q(*columns, **filters):
+    cols, filts = [], []
+    if columns:
+        for col in columns:
+            if isinstance(col, six.string_types):
+                cols.append(getattr(E, col))
+            elif isinstance(col, InstrumentedAttribute):
+                cols.append(col)
+            elif isinstance(col, BinaryExpression):
+                filts.append(col)
+
+    if not cols: # in case all *args were BinaryExpression (filters)
+        cols = [E]
+
+    session = Session(bind=_engine)
+    q_ = session.query(*cols)
+
+    if filters or filts:
+        for k, v in six.iteritems(filters):
+            if isinstance(v, BinaryExpression):
+                filts.append(v)
+            elif hasattr(v, 'split'):
+                filts.append(getattr(E, k) == v)
+            elif hasattr(v, '__getitem__') or hasattr(v, '__iter__'):
+                filts.append(getattr(E, k).in_(v))
+            else:
+                filts.append(getattr(E, k) == v)
+        q_ = q_.filter(*filts)
+
+    return q_, session
+
+
 def select(*columns, **filters):
     """Get rows from the Experiment table associated with session.
 
@@ -436,35 +468,9 @@ def select(*columns, **filters):
     >> initialise('.')
     >> rows = select('model_type', 'results_file', k=[1, 2, 3, 5, 8])
     """
-    cols, filts = [], []
-    if columns:
-        for col in columns:
-            if isinstance(col, six.string_types):
-                cols.append(getattr(E, col))
-            elif isinstance(col, InstrumentedAttribute):
-                cols.append(col)
-            elif isinstance(col, BinaryExpression):
-                filts.append(col)
-
-    if not cols: # in case all *args were BinaryExpression (filters)
-        cols = [E]
-
-    session = Session(bind=_engine)
-    q = session.query(*cols)
-
-    if filters or filts:
-        for k, v in six.iteritems(filters):
-            if isinstance(v, BinaryExpression):
-                filts.append(v)
-            elif hasattr(v, 'split'):
-                filts.append(getattr(E, k) == v)
-            elif hasattr(v, '__getitem__') or hasattr(v, '__iter__'):
-                filts.append(getattr(E, k).in_(v))
-            else:
-                filts.append(getattr(E, k) == v)
-        q = q.filter(*filts)
-    rows = q.all()
-    session.close()
+    q_, ses = q(*columns, **filters)
+    rows = q_.all()
+    ses.close()
     return rows
 
 
